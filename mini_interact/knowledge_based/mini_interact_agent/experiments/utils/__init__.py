@@ -1,3 +1,0 @@
-from .prompts import (
-    TemplateReActUserBirdInteract
-)
