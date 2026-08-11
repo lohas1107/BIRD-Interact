@@ -18,51 +18,94 @@ def _esc(text):
     return html.escape(str(text))
 
 
+def _display_tool_name(name):
+    prefix = "mcp__bird__"
+    return name[len(prefix):] if isinstance(name, str) and name.startswith(prefix) else name
+
+
+def _stringify_event_value(value, limit=4000):
+    if isinstance(value, (dict, list)):
+        value = json.dumps(value, ensure_ascii=False)
+    value = str(value or "")
+    return value if len(value) <= limit else value[:limit] + "..."
+
+
 def _build_timeline(r):
-    """Build a unified timeline from legacy agent events when available."""
-    events = r.get("adk_events", [])
+    """Build a timeline from Claude SDK events; fallback is tool_trajectory."""
+    events = r.get("agent_events", [])
     if not events:
-        return None  # fallback to tool_trajectory
+        return None
 
     timeline = []
-    for e in events:
-        etype = e.get("type")
-        if etype == "user_message":
-            timeline.append({
-                "kind": "user_msg",
-                "text": e.get("message", ""),
-            })
-        elif etype == "adk_event":
-            content = e.get("content", {})
-            role = content.get("role", "")
-            parts = content.get("parts", [])
-            for part in parts:
-                ptype = part.get("type", "")
-                if ptype == "text" and role == "model":
-                    text = part.get("text", "").strip()
+    tool_names = {}
+    rendered = 0
+
+    for event in events:
+        if not isinstance(event, dict):
+            timeline.append({"kind": "raw", "text": _stringify_event_value(event)})
+            continue
+
+        event_type = event.get("type")
+        if event_type == "user_message":
+            timeline.append({"kind": "user_msg", "text": event.get("message", "")})
+            rendered += 1
+            continue
+
+        if event_type == "AssistantMessage":
+            for block in event.get("content", []) or []:
+                if not isinstance(block, dict):
+                    continue
+                if "text" in block:
+                    text = str(block.get("text", "")).strip()
                     if text:
                         timeline.append({"kind": "thinking", "text": text})
-                elif ptype == "function_call":
+                        rendered += 1
+                elif "thinking" in block:
+                    text = str(block.get("thinking", "")).strip()
+                    if text:
+                        timeline.append({"kind": "thinking", "text": text})
+                        rendered += 1
+                elif "name" in block and "input" in block:
+                    raw_name = block.get("name", "?")
+                    name = _display_tool_name(raw_name)
+                    tool_names[block.get("id", "")] = name
                     timeline.append({
                         "kind": "tool_call",
-                        "name": part.get("name", "?"),
-                        "args": part.get("args", {}),
+                        "name": name,
+                        "args": block.get("input", {}),
                     })
-                elif ptype == "function_response":
-                    resp = part.get("response", "")
-                    if isinstance(resp, str) and len(resp) > 2000:
-                        resp = resp[:2000] + "..."
-                    timeline.append({
-                        "kind": "tool_response",
-                        "name": part.get("name", "?"),
-                        "response": resp,
-                    })
-            if e.get("final") and role == "model":
-                texts = [p.get("text", "") for p in parts if p.get("type") == "text"]
-                final_text = "\n".join(t for t in texts if t.strip())
-                if final_text:
-                    timeline.append({"kind": "final", "text": final_text})
-    return timeline
+                    rendered += 1
+            continue
+
+        if event_type == "UserMessage":
+            content = event.get("content", [])
+            blocks = content if isinstance(content, list) else []
+            for block in blocks:
+                if not isinstance(block, dict) or "tool_use_id" not in block:
+                    continue
+                name = tool_names.get(block.get("tool_use_id", ""), "tool")
+                timeline.append({
+                    "kind": "tool_response",
+                    "name": name,
+                    "response": _stringify_event_value(block.get("content", "")),
+                })
+                rendered += 1
+            continue
+
+        if event_type == "ResultMessage":
+            result = event.get("result")
+            if result:
+                timeline.append({"kind": "final", "text": _stringify_event_value(result)})
+                rendered += 1
+            continue
+
+        timeline.append({
+            "kind": "raw",
+            "text": _stringify_event_value(event),
+        })
+        rendered += 1
+
+    return timeline if rendered else None
 
 
 def _build_tool_trajectory_html(r):
@@ -126,6 +169,10 @@ def _render_ev(kind, **kw):
         return f"""<div class="ev final-response">
             <div class="ev-header"><span class="ev-icon">✅</span><span class="ev-label">Final Response</span></div>
             <pre class="ev-body">{_esc(kw["text"])}</pre></div>"""
+    if kind == "raw":
+        return f"""<div class="ev raw-event">
+            <div class="ev-header"><span class="ev-icon">ℹ️</span><span class="ev-label">SDK Event</span></div>
+            <pre class="ev-body">{_esc(kw["text"])}</pre></div>"""
     return ""
 
 
@@ -180,6 +227,8 @@ def _build_timeline_html(timeline, traj_costs):
         elif kind == "final":
             _flush()
             steps.append([("final", {"text": item["text"]})])
+        elif kind == "raw":
+            current_step.append(("raw", {"text": item["text"]}))
     _flush()
 
     # Render steps

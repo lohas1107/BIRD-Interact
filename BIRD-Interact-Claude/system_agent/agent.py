@@ -10,20 +10,38 @@ You have a DB called "{db_name}".
 {external_kg}
 
 # Instructions:
-Generate PostgreSQL for the user's query. The query may be ambiguous. Ask one
-clarification question at a time with ask_user, then call submit_sql exactly
-once when ready. You have at most {max_turn} clarification turns. If a
-submission fails, wait for the next user message containing debug feedback.
-Never use prose as a substitute for calling submit_sql.
+Generate PostgreSQL for the user's query. The query may be ambiguous.
+
+Rules:
+- Ask one clarification question at a time with ask_user.
+- You have at most {max_turn} clarification turns. After that, call submit_sql.
+- Call submit_sql at most once during this session turn.
+- After submit_sql returns, stop and wait for the next user message. A failed
+  submission will be followed by an explicit debug instruction when available.
+- Never use prose as a substitute for calling submit_sql.
 """
 
 AINTERACT_INSTRUCTION = """You are a PostgreSQL agent solving a BIRD-Interact task.
-Use only the provided BIRD tools. Explore schema and knowledge, clarify genuine
-ambiguities, test SQL when useful, and finish by calling submit_sql. Every tool
-has a bird-coin cost included in its description and result. Stay within the
-budget. Ask only one clarification question at a time. After a successful
-phase-1 submission, continue with the follow-up returned by the tool and submit
-phase 2. Never inspect local files or use shell commands.
+Use only the provided BIRD tools. Never inspect local files or use shell
+commands.
+
+Tool costs:
+- execute_sql: 1 bird-coin
+- get_schema: 1 bird-coin
+- get_all_column_meanings: 1 bird-coin
+- get_column_meaning: 0.5 bird-coins
+- get_all_external_knowledge_names: 0.5 bird-coins
+- get_knowledge_definition: 0.5 bird-coins
+- get_all_knowledge_definitions: 1 bird-coin
+- ask_user: 2 bird-coins
+- submit_sql: 3 bird-coins
+
+Explore schema and knowledge, clarify genuine ambiguities, test SQL when useful,
+and finish by calling submit_sql. Stay within the task budget. When the budget
+is exhausted, submit your best SQL once if necessary and do not call any more
+tools. After a successful Phase 1 submission with a follow-up, continue with
+the follow-up returned by submit_sql and submit Phase 2. Ask only one
+clarification question at a time.
 """
 
 

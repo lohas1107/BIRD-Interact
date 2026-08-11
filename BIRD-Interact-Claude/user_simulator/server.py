@@ -62,14 +62,13 @@ class TaskSimState:
 _task_states: Dict[str, TaskSimState] = {}
 
 
-def _call_llm(prompt: str, max_tokens: int = 200) -> str:
+def _call_llm(prompt: str) -> str:
     try:
         from shared.llm import call_llm
         return call_llm(
             [{"role": "user", "content": prompt}],
             model_name=settings.user_sim_model,
             temperature=0,
-            max_tokens=max_tokens,
         )
     except Exception as e:
         logger.error(f"LLM call failed: {e}")
@@ -83,9 +82,7 @@ def _parse_action(state: TaskSimState, question: str) -> str:
     prompt = prompt.replace("[[amb_json]]", state.get_ambiguity_json())
     prompt = prompt.replace("[[SQL_Glot]]", state.get_all_sql_segments())
     prompt = prompt.replace("[[DB_schema]]", state.db_schema)
-    # v2 includes <think> reasoning, needs more tokens
-    max_tok = 500 if PROMPT_VERSION == "v2" else 200
-    content = _call_llm(prompt, max_tokens=max_tok)
+    content = _call_llm(prompt)
     # Extract action from <s>...</s> (skip <think>...</think> if present)
     if "</s>" in content:
         action = content.split("</s>")[0].strip()
@@ -107,7 +104,7 @@ def _generate_response(state: TaskSimState, question: str, action: str) -> str:
     prompt = prompt.replace("[[GT_SQL]]", state.get_gt_sql_str())
     prompt = prompt.replace("[[SQL_Glot]]", state.get_all_sql_segments())
     prompt = prompt.replace("[[DB_schema]]", state.db_schema)
-    content = _call_llm(prompt, max_tokens=1024)
+    content = _call_llm(prompt)
     # Extract response: handle both complete and truncated cases
     if "</s>" in content:
         extracted = content.split("</s>")[0].strip()

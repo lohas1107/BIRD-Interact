@@ -52,6 +52,8 @@ class ClaudeRuntime:
             session_state.setdefault("phase1_completed", False)
             session_state.setdefault("phase2_completed", False)
             session_state.setdefault("task_done", False)
+            session_state.setdefault("phase_transition_done", False)
+            session_state.setdefault("phase_transition_failed", False)
             server, allowed_tools = build_tool_server(session_state, mode)
             options = ClaudeAgentOptions(
                 model=settings.system_agent_model,

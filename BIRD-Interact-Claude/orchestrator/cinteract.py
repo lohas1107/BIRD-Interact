@@ -63,10 +63,6 @@ async def get_knowledge_service(task_id: str) -> str:
     return data.get("knowledge", "[]")
 
 
-async def phase_transition_service(task_id: str):
-    await _post(f"{USER_SIM_URL}/phase_transition", {"task_id": task_id})
-
-
 async def cleanup_task_service(task_id: str):
     try:
         await _post(
@@ -134,6 +130,8 @@ async def run_single_task(task_data: dict) -> Dict[str, Any]:
             "model_turns": 0,
             "tool_trajectory": [],
             "dialogue_history": [],
+            "phase_transition_done": False,
+            "phase_transition_failed": False,
         }
         await init_agent_session(instance_id, session_state)
         all_agent_events = []
@@ -175,10 +173,9 @@ async def run_single_task(task_data: dict) -> Dict[str, Any]:
         p2_passed = False
         best_p1 = p1_passed or debug_passed
 
-        if best_p1 and has_follow_up:
+        if best_p1 and has_follow_up and not state.get("phase_transition_failed", False):
             follow_up_query = task_data["follow_up"].get("query", "")
             logger.info("  [%s] Phase 2: Follow-up", instance_id)
-            await phase_transition_service(instance_id)
 
             fu_msg = (
                 f"Phase 1 is complete. Here is a follow-up question:\n\n{follow_up_query}\n\n"

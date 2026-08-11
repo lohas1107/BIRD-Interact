@@ -54,16 +54,21 @@ def build_tool_server(state: dict, mode: str):
                 return _text(
                     f"Budget exhausted ({before:.1f} remaining). You MUST call submit_sql now."
                 )
-            state["budget_remaining"] = before - cost if before >= cost else -1.0
+            after = before - cost if before >= cost else -1.0
+            # A submit that consumes the last available coins is terminal.  The
+            # current submit is still allowed, but no later tool call may run.
+            if name == "submit_sql" and after <= 0:
+                after = -1.0
+            state["budget_remaining"] = after
 
         try:
             result = await operation()
         except Exception as exc:
             result = f"Tool error: {type(exc).__name__}: {exc}"
 
-        # The reference runtime stops immediately after the final free submit.
-        # Mirror that deterministically so an exhausted session cannot
-        # keep making zero-cost submissions.
+        # The reference runtime stops after the final submit.  task_done is
+        # also checked at the top of this function, so an exhausted session
+        # cannot make another DB or user-simulator request.
         if mode == "a-interact" and name == "submit_sql" and state.get("budget_remaining", 0) < 0:
             state["task_done"] = True
 
@@ -84,7 +89,8 @@ def build_tool_server(state: dict, mode: str):
         notes = []
         if mode == "a-interact" and state.get("budget_remaining", -1) >= 0:
             notes.append(
-                f"Remaining budget: {state['budget_remaining']:.1f}/{state.get('initial_budget', 0):.1f}"
+                f"Budget remaining: {state['budget_remaining']:.1f}/"
+                f"{state.get('initial_budget', 0):.1f} bird-coins"
             )
         return _text(str(result) + ("\n\n[SYSTEM NOTE: " + "; ".join(notes) + "]" if notes else ""))
 
@@ -154,8 +160,12 @@ def build_tool_server(state: dict, mode: str):
             return answer
         result = await run_tool("ask_user", args, op)
         if mode == "c-interact":
-            remaining = max(0, state.get("max_turn", 0) - state.get("clarification_turns_used", 0))
-            result["content"][0]["text"] += f"\n\n[SYSTEM NOTE: Clarification turns remaining: {remaining}]"
+            maximum = state.get("max_turn", 0)
+            remaining = max(0, maximum - state.get("clarification_turns_used", 0))
+            result["content"][0]["text"] += (
+                f"\n\n[SYSTEM NOTE: Clarification turns remaining: "
+                f"{remaining}/{maximum}]"
+            )
         return result
 
     @tool("submit_sql", "Submit final PostgreSQL for evaluation. Cost: 3 bird-coins.", {"sql": str})
@@ -171,9 +181,30 @@ def build_tool_server(state: dict, mode: str):
                 if phase == 1:
                     state["phase1_completed"] = True
                     state["current_phase"] = 2
-                    if data.get("has_follow_up") and mode == "a-interact":
-                        await call_service(settings.user_sim_port, "/phase_transition", {"task_id": task_id})
-                    elif not data.get("has_follow_up"):
+                    has_follow_up = bool(data.get("has_follow_up"))
+                    budget_exhausted = (
+                        mode == "a-interact"
+                        and state.get("budget_remaining", 0) < 0
+                    )
+                    if has_follow_up and not budget_exhausted:
+                        if not state.get("phase_transition_done", False):
+                            try:
+                                await call_service(
+                                    settings.user_sim_port,
+                                    "/phase_transition",
+                                    {"task_id": task_id},
+                                )
+                            except Exception as exc:
+                                state["phase_transition_failed"] = True
+                                state["task_done"] = True
+                                state["_phase_transition_error"] = str(exc)
+                                parts = [
+                                    raw.replace("[exec_err_flg] ", ""),
+                                    "Phase transition failed; task terminated.",
+                                ]
+                                return "\n".join(parts)
+                            state["phase_transition_done"] = True
+                    elif not has_follow_up:
                         state["task_done"] = True
                 elif phase == 2:
                     state["phase2_completed"] = True

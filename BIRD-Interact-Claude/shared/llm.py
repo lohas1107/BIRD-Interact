@@ -10,7 +10,7 @@ from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, qu
 from shared.config import settings
 
 
-async def _call(prompt: str, model_name: str, max_tokens: int) -> str:
+async def _call(prompt: str, model_name: str) -> str:
     if os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError(
             "ANTHROPIC_API_KEY is set; refusing pay-as-you-go API authentication"
@@ -25,8 +25,7 @@ async def _call(prompt: str, model_name: str, max_tokens: int) -> str:
         skills=[],
         max_turns=1,
         cwd=str(settings.project_root),
-        # Claude Code has no temperature option. Limit generated text through
-        # the prompt-facing token budget where supported by the CLI.
+        # Claude Code has no temperature or output-token option in this SDK.
         max_thinking_tokens=0,
     )
     texts = []
@@ -36,9 +35,8 @@ async def _call(prompt: str, model_name: str, max_tokens: int) -> str:
     return "\n".join(texts).strip()
 
 
-def call_llm(messages: list, model_name: str | None = None, temperature: float = 0,
-             max_tokens: int = 1024) -> str:
-    """Synchronous compatibility wrapper; invoked inside a worker thread."""
+def call_llm(messages: list, model_name: str | None = None, temperature: float = 0) -> str:
+    """Synchronous no-tools wrapper; invoked inside a worker thread."""
     del temperature
     prompt = "\n\n".join(str(message.get("content", "")) for message in messages)
-    return anyio.run(_call, prompt, model_name or settings.user_sim_model, max_tokens)
+    return anyio.run(_call, prompt, model_name or settings.user_sim_model)
