@@ -27,6 +27,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared.config import settings
+from shared.tool_profiles import resolve_tool_profile
+from system_agent.agent import submission_turn_instruction, task_turn_instruction
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -98,7 +100,7 @@ async def run_agent_session(task_id: str, message: str) -> dict:
 
 # ── Main pipeline ──
 
-async def run_single_task(task_data: dict) -> Dict[str, Any]:
+async def run_single_task(task_data: dict, tool_profile: dict | None = None) -> Dict[str, Any]:
     instance_id = task_data["instance_id"]
     db_name = task_data["selected_database"]
     logger.info("Starting task: %s (db: %s)", instance_id, db_name)
@@ -119,6 +121,7 @@ async def run_single_task(task_data: dict) -> Dict[str, Any]:
         max_turn = n_critical + n_knowledge + settings.patience
 
         # Init Claude session with state (instruction placeholders filled here)
+        tool_profile = tool_profile or resolve_tool_profile("c-interact").as_dict()
         session_state = {
             "task_id": instance_id,
             "mode": "c-interact",
@@ -132,17 +135,15 @@ async def run_single_task(task_data: dict) -> Dict[str, Any]:
             "dialogue_history": [],
             "phase_transition_done": False,
             "phase_transition_failed": False,
+            "tool_profile": tool_profile,
         }
         await init_agent_session(instance_id, session_state)
         all_agent_events = []
 
         # ── Phase 1: Clarify + Submit ──
         logger.info("  [%s] Phase 1: %d clarification turns", instance_id, max_turn)
-        phase1_msg = (
-            f"User Query:\n{task_data.get('amb_user_query', '')}\n\n"
-            f"You have {max_turn} clarification turns. "
-            f"Ask questions with ask_user to resolve ambiguities, "
-            f"then call submit_sql with your final PostgreSQL query."
+        phase1_msg = task_turn_instruction(
+            "c-interact", session_state, task_data.get("amb_user_query", "")
         )
         result = await run_agent_session(instance_id, phase1_msg)
         state = result.get("state", {})
@@ -158,9 +159,10 @@ async def run_single_task(task_data: dict) -> Dict[str, Any]:
 
             if "[exec_err_flg]" in raw_msg:
                 err_detail = raw_msg.split("[exec_err_flg] ")[-1]
-                debug_msg = f"Your SQL is not executable: {err_detail}\nPlease fix and call submit_sql."
+                debug_msg = f"Your SQL is not executable: {err_detail}"
             else:
-                debug_msg = "Your SQL is not correct. You have one more chance. Please fix and call submit_sql."
+                debug_msg = "Your SQL is not correct. You have one more chance."
+            debug_msg = submission_turn_instruction(tuple(tool_profile["tools"]), debug_msg)
 
             result = await run_agent_session(instance_id, debug_msg)
             state = result.get("state", {})
@@ -177,10 +179,7 @@ async def run_single_task(task_data: dict) -> Dict[str, Any]:
             follow_up_query = task_data["follow_up"].get("query", "")
             logger.info("  [%s] Phase 2: Follow-up", instance_id)
 
-            fu_msg = (
-                f"Phase 1 is complete. Here is a follow-up question:\n\n{follow_up_query}\n\n"
-                f"Generate the PostgreSQL query and call submit_sql."
-            )
+            fu_msg = task_turn_instruction("c-interact", session_state, follow_up_query)
             result = await run_agent_session(instance_id, fu_msg)
             state = result.get("state", {})
             all_agent_events = list(state.get("agent_events", []))
@@ -195,9 +194,10 @@ async def run_single_task(task_data: dict) -> Dict[str, Any]:
 
                 if "[exec_err_flg]" in raw_msg:
                     err_detail = raw_msg.split("[exec_err_flg] ")[-1]
-                    p2_debug_msg = f"Your SQL is not executable: {err_detail}\nPlease fix and call submit_sql."
+                    p2_debug_msg = f"Your SQL is not executable: {err_detail}"
                 else:
-                    p2_debug_msg = "Your SQL is not correct. You have one more chance. Please fix and call submit_sql."
+                    p2_debug_msg = "Your SQL is not correct. You have one more chance."
+                p2_debug_msg = submission_turn_instruction(tuple(tool_profile["tools"]), p2_debug_msg)
 
                 result = await run_agent_session(instance_id, p2_debug_msg)
                 state = result.get("state", {})
@@ -230,7 +230,8 @@ async def run_single_task(task_data: dict) -> Dict[str, Any]:
 
 # ── Batch evaluation ──
 
-async def run_evaluation(data_path: str, output_path: str, limit: int = None):
+async def run_evaluation(data_path: str, output_path: str, limit: int = None, tool_profile: dict | None = None):
+    tool_profile = tool_profile or resolve_tool_profile("c-interact").as_dict()
     tasks = []
     with open(data_path) as f:
         for line in f:
@@ -249,7 +250,7 @@ async def run_evaluation(data_path: str, output_path: str, limit: int = None):
     for i, td in enumerate(tasks):
         logger.info("=== Task %d/%d: %s ===", i + 1, len(tasks), td["instance_id"])
         try:
-            r = await run_single_task(td)
+            r = await run_single_task(td, tool_profile)
             results.append(r)
             total_reward += r["total_reward"]
             if r["phase1_passed"]:
@@ -275,6 +276,7 @@ async def run_evaluation(data_path: str, output_path: str, limit: int = None):
                     "phase2_count": p2_count,
                 },
                 "results": results,
+                "tool_profile": tool_profile,
             }
             with open(output_path, "w") as f:
                 json.dump(output, f, indent=2, default=str)
@@ -291,8 +293,14 @@ def main():
     parser.add_argument("--data", default=settings.data_path)
     parser.add_argument("--output", default="results/eval_cinteract.json")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--tool-profile", default=None)
+    parser.add_argument("--tool-profiles-file", default=None)
     args = parser.parse_args()
-    asyncio.run(run_evaluation(args.data, args.output, args.limit))
+    try:
+        profile = resolve_tool_profile("c-interact", args.tool_profile, args.tool_profiles_file)
+    except ValueError as exc:
+        parser.error(str(exc))
+    asyncio.run(run_evaluation(args.data, args.output, args.limit, profile.as_dict()))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+{
+  "a-interact-default": [
+    "execute_sql",
+    "get_schema",
+    "get_all_column_meanings",
+    "get_column_meaning",
+    "get_all_external_knowledge_names",
+    "get_knowledge_definition",
+    "get_all_knowledge_definitions",
+    "ask_user",
+    "submit_sql"
+  ],
+  "c-interact-default": [
+    "ask_user",
+    "submit_sql"
+  ]
+}

@@ -152,6 +152,47 @@ Start with concurrency 1 because parallel Claude SDK clients share the same
 subscription limits. Result JSON is written under `results/` and includes
 phase metrics, `tool_trajectory`, `agent_events`, elapsed time, and budget use.
 
+### Tool profiles
+
+Agent tools are selected once per evaluation from `config/tool_profiles.json`.
+The file is a JSON object whose keys are unique profile names and whose values
+are ordered, duplicate-free arrays of tool names. The built-in defaults are
+`a-interact-default` for a-interact and `c-interact-default` for c-interact.
+Available names are:
+
+```text
+execute_sql
+get_schema
+get_all_column_meanings
+get_column_meaning
+get_all_external_knowledge_names
+get_knowledge_definition
+get_all_knowledge_definitions
+ask_user
+submit_sql
+```
+
+Select a profile or a different JSON file with either the unified runner or an
+a/c standalone runner:
+
+```bash
+python -m orchestrator.runner --mode a-interact --tool-profile my-profile
+python -m orchestrator.runner --mode c-interact \
+  --tool-profiles-file /path/to/tool_profiles.json --tool-profile semantic-c
+python -m orchestrator.ainteract --tool-profile my-profile
+python -m orchestrator.cinteract --tool-profile semantic-c
+```
+
+An empty tool array is valid, as are experimental profiles missing
+`ask_user` or `submit_sql`. Unknown/duplicate tools or profiles, malformed
+JSON, and invalid value types fail before evaluation tasks start. Tool order is
+preserved in the MCP server and SDK allowlist. c-interact always preloads its
+complete schema and external knowledge regardless of its selected tools.
+Resolved profile metadata is stored once at the top level of a/c result JSON.
+
+Oracle bypasses the agent and MCP server. It does not load this configuration,
+and rejects both profile flags if either is explicitly supplied.
+
 ## View results
 
 The runner writes JSON results as `results/eval_<mode>.json` by default. Generate
@@ -187,8 +228,8 @@ can submit Phase 2.
 
 ### c-interact (Conversational Interaction)
 
-The orchestrator drives the phase structure and exposes only `ask_user` and
-`submit_sql` to the agent. The clarification limit is:
+The orchestrator drives the phase structure and, by default, exposes only
+`ask_user` and `submit_sql` to the agent. The clarification limit is:
 
 ```text
 number_of_critical_ambiguities + number_of_knowledge_ambiguities + patience

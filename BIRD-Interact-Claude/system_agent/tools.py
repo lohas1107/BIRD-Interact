@@ -51,9 +51,13 @@ def build_tool_server(state: dict, mode: str):
         before = state.get("budget_remaining")
         if mode == "a-interact" and before is not None:
             if before < cost and name != "submit_sql":
-                return _text(
-                    f"Budget exhausted ({before:.1f} remaining). You MUST call submit_sql now."
+                available = state.get("tool_profile", {}).get("tools", ())
+                instruction = (
+                    "You MUST call submit_sql now."
+                    if "submit_sql" in available else
+                    "No further tool call can be made."
                 )
+                return _text(f"Budget exhausted ({before:.1f} remaining). {instruction}")
             after = before - cost if before >= cost else -1.0
             # A submit that consumes the last available coins is terminal.  The
             # current submit is still allowed, but no later tool call may run.
@@ -149,7 +153,9 @@ def build_tool_server(state: dict, mode: str):
                 used = state.get("clarification_turns_used", 0)
                 maximum = state.get("max_turn", 0)
                 if used >= maximum:
-                    return f"Clarification limit reached ({maximum}). Call submit_sql now."
+                    available = state.get("tool_profile", {}).get("tools", ())
+                    suffix = " Call submit_sql now." if "submit_sql" in available else ""
+                    return f"Clarification limit reached ({maximum}).{suffix}"
                 state["clarification_turns_used"] = used + 1
             data = await call_service(settings.user_sim_port, "/ask", {"task_id": task_id, "question": args["question"]})
             answer = data.get("answer", "No response from user.")
@@ -220,5 +226,11 @@ def build_tool_server(state: dict, mode: str):
     all_tools = [execute_sql, get_schema, get_all_column_meanings, get_column_meaning,
                  get_all_external_knowledge_names, get_knowledge_definition,
                  get_all_knowledge_definitions, ask_user, submit_sql]
-    selected = all_tools if mode == "a-interact" else [ask_user, submit_sql]
+    by_name = {item.name: item for item in all_tools}
+    profile = state.get("tool_profile")
+    if profile is None:
+        from shared.tool_profiles import resolve_tool_profile
+        profile = resolve_tool_profile(mode).as_dict()
+        state["tool_profile"] = profile
+    selected = [by_name[name] for name in profile["tools"]]
     return create_sdk_mcp_server(name="bird", version="1.0.0", tools=selected), [f"mcp__bird__{t.name}" for t in selected]
