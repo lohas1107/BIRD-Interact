@@ -38,6 +38,16 @@ class SchemaRequest(BaseModel):
     task_id: str
 
 
+class TableSchemaRequest(BaseModel):
+    task_id: str
+    database_name: str
+    from_table: str
+    to_table: Optional[str] = None
+    include: Optional[List[str]] = None
+    max_hops: Optional[int] = 5
+    max_paths: Optional[int] = 5
+
+
 class ColumnMeaningRequest(BaseModel):
     task_id: str
     table_name: str

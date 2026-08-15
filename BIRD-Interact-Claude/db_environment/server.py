@@ -18,9 +18,10 @@ from shared.db_utils import (
 )
 from shared.models import (
     ExecuteSQLRequest, ExecuteSQLResponse, InitTaskRequest,
-    SchemaRequest, ColumnMeaningRequest, KnowledgeRequest,
+    SchemaRequest, TableSchemaRequest, ColumnMeaningRequest, KnowledgeRequest,
     SubmitSQLRequest, SubmitSQLResponse,
 )
+from db_environment.knowledge_graph import GraphSchemaError, Neo4jSchemaRepository
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="BIRD-Interact DB Environment", version="1.0.0")
@@ -34,6 +35,7 @@ _column_meanings_cache: Dict[str, Dict] = {}
 _external_knowledge_cache: Dict[str, Dict] = {}
 _submit_attempts: Dict[str, Dict[int, int]] = {}
 _successful_phase1_sql: Dict[str, str] = {}
+_knowledge_graph = Neo4jSchemaRepository(settings)
 
 
 def _load_db_data(db_name: str):
@@ -335,6 +337,22 @@ async def get_schema(req: SchemaRequest):
     return {"schema": _schema_cache.get(db_name, "Schema not available")}
 
 
+@app.post("/table_schema")
+@app.post("/get_table_schema")
+async def get_table_schema(req: TableSchemaRequest):
+    """Read the kg-v1 schema graph without consulting task-selected DB state."""
+
+    if req.task_id not in _task_data:
+        raise HTTPException(404, f"Task {req.task_id} not initialized")
+    try:
+        return await asyncio.to_thread(_knowledge_graph.get_table_schema, req)
+    except GraphSchemaError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+
+
 @app.post("/all_column_meanings")
 async def get_all_column_meanings(req: SchemaRequest):
     td = _task_data.get(req.task_id)
@@ -413,6 +431,11 @@ async def cleanup_task(req: SchemaRequest):
 @app.get("/health")
 async def health():
     return {"status": "healthy", "service": "db_environment"}
+
+
+@app.on_event("shutdown")
+async def close_knowledge_graph():
+    await asyncio.to_thread(_knowledge_graph.close)
 
 
 if __name__ == "__main__":

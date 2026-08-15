@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     user_sim_port: int = 6001
     db_env_port: int = 6002
 
+    # kg-v1 Neo4j physical-schema graph
+    neo4j_uri: str = "bolt://127.0.0.1:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "bird-interact-dev"
+    neo4j_database: str = "neo4j"
+
     # Claude Code model aliases, resolved by the authenticated subscription.
     user_sim_model: str = "haiku"
     system_agent_model: str = "sonnet"

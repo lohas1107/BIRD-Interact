@@ -13,6 +13,7 @@ from shared.config import settings
 TOOL_COSTS = {
     "execute_sql": 1.0,
     "get_schema": 1.0,
+    "get_table_schema": 1.0,
     "get_all_column_meanings": 1.0,
     "get_column_meaning": 0.5,
     "get_all_external_knowledge_names": 0.5,
@@ -32,13 +33,28 @@ def _preview(value: Any, limit: int = 2000) -> str:
     return value if len(value) <= limit else value[:limit] + "...<truncated>"
 
 
+class ToolServiceError(RuntimeError):
+    """Preserve structured service error codes in the agent-visible result."""
+
+
 def build_tool_server(state: dict, mode: str):
     """Build tools whose closures own one task's deterministic benchmark state."""
 
     async def call_service(port: int, path: str, payload: dict, timeout: float = 120.0) -> dict:
         async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             response = await client.post(f"http://127.0.0.1:{port}{path}", json=payload)
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                try:
+                    detail = response.json().get("detail")
+                except (ValueError, TypeError):
+                    detail = None
+                if isinstance(detail, dict) and detail.get("code"):
+                    raise ToolServiceError(
+                        f"{detail['code']}: {detail.get('message', 'service request failed')}"
+                    ) from exc
+                raise
             return response.json()
 
     async def run_tool(name: str, args: dict, operation) -> dict:
@@ -65,10 +81,12 @@ def build_tool_server(state: dict, mode: str):
                 after = -1.0
             state["budget_remaining"] = after
 
+        tool_failed = False
         try:
             result = await operation()
         except Exception as exc:
             result = f"Tool error: {type(exc).__name__}: {exc}"
+            tool_failed = True
 
         # The reference runtime stops after the final submit.  task_done is
         # also checked at the top of this function, so an exhausted session
@@ -96,7 +114,10 @@ def build_tool_server(state: dict, mode: str):
                 f"Budget remaining: {state['budget_remaining']:.1f}/"
                 f"{state.get('initial_budget', 0):.1f} bird-coins"
             )
-        return _text(str(result) + ("\n\n[SYSTEM NOTE: " + "; ".join(notes) + "]" if notes else ""))
+        response = _text(str(result) + ("\n\n[SYSTEM NOTE: " + "; ".join(notes) + "]" if notes else ""))
+        if tool_failed:
+            response["is_error"] = True
+        return response
 
     task_id = state["task_id"]
 
@@ -112,6 +133,44 @@ def build_tool_server(state: dict, mode: str):
         async def op():
             return (await call_service(settings.db_env_port, "/schema", {"task_id": task_id})).get("schema", "")
         return await run_tool("get_schema", args, op)
+
+    @tool(
+        "get_table_schema",
+        "Get table columns, descriptions, constraints, direct joins, and optional shortest FK join paths from the kg-v1 graph. Cost: 1 bird-coin.",
+        {
+            "type": "object",
+            "properties": {
+                "database_name": {"type": "string", "description": "Graph database name."},
+                "from_table": {"type": "string", "description": "Exact table name; matching is case-insensitive."},
+                "to_table": {"type": "string", "description": "Optional second exact table name; requests join_paths."},
+                "include": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["columns", "descriptions", "constraints", "direct_joins"],
+                    },
+                    "description": "Optional sections; defaults to all sections.",
+                },
+                "max_hops": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
+                "max_paths": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
+            },
+            "required": ["database_name", "from_table"],
+            "additionalProperties": False,
+        },
+    )
+    async def get_table_schema(args):
+        async def op():
+            payload = {
+                "task_id": task_id,
+                "database_name": args["database_name"],
+                "from_table": args["from_table"],
+            }
+            for key in ("to_table", "include", "max_hops", "max_paths"):
+                if key in args and args[key] is not None:
+                    payload[key] = args[key]
+            data = await call_service(settings.db_env_port, "/table_schema", payload)
+            return json.dumps(data, ensure_ascii=False)
+        return await run_tool("get_table_schema", args, op)
 
     @tool("get_all_column_meanings", "Get all column descriptions. Cost: 1 bird-coin.", {})
     async def get_all_column_meanings(args):
@@ -223,7 +282,7 @@ def build_tool_server(state: dict, mode: str):
             return "\n".join(parts)
         return await run_tool("submit_sql", args, op)
 
-    all_tools = [execute_sql, get_schema, get_all_column_meanings, get_column_meaning,
+    all_tools = [execute_sql, get_schema, get_table_schema, get_all_column_meanings, get_column_meaning,
                  get_all_external_knowledge_names, get_knowledge_definition,
                  get_all_knowledge_definitions, ask_user, submit_sql]
     by_name = {item.name: item for item in all_tools}

@@ -27,6 +27,10 @@ def instruction_for(mode: str, state: dict) -> str:
             )
         if "get_schema" in tools:
             lines.append("Use get_schema when database structure is needed.")
+        if "get_table_schema" in tools:
+            lines.append(
+                "Use get_table_schema for targeted table columns, descriptions, constraints, and joins; provide database_name and from_table, and add to_table when a join path is needed."
+            )
         knowledge_tools = [name for name in tools if "knowledge" in name or "meaning" in name]
         if knowledge_tools:
             lines.append("Use the available semantic and knowledge tools when definitions are needed.")
@@ -78,6 +82,8 @@ def task_turn_instruction(mode: str, state: dict, user_query: str, budget: float
         lines.append(f"You have a budget of {budget:.1f} bird-coins.")
     if "get_schema" in tools:
         lines.append("Use get_schema if you need to inspect the database structure.")
+    if "get_table_schema" in tools:
+        lines.append("Use get_table_schema for targeted schema and join information; add to_table when you need join_paths.")
     if any("knowledge" in name or "meaning" in name for name in tools):
         lines.append("Use the available semantic tools if you need domain definitions.")
     if "ask_user" in tools:

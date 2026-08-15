@@ -176,7 +176,7 @@ Select a profile or a different JSON file with either the unified runner or an
 a/c standalone runner:
 
 ```bash
-python -m orchestrator.runner --mode a-interact --tool-profile my-profile
+python -m orchestrator.runner --mode a-interact --tool-profile kg-v1
 python -m orchestrator.runner --mode c-interact \
   --tool-profiles-file /path/to/tool_profiles.json --tool-profile semantic-c
 python -m orchestrator.ainteract --tool-profile my-profile

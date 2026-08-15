@@ -21,6 +21,10 @@ VALID_TOOLS = (
     "submit_sql",
 )
 
+# kg-v1 is an explicitly selected graph profile and is intentionally not part
+# of the legacy a-interact default allowlist.
+PROFILE_ONLY_TOOLS = ("get_table_schema",)
+
 DEFAULT_PROFILES = {
     "a-interact": "a-interact-default",
     "c-interact": "c-interact-default",
@@ -59,7 +63,7 @@ def load_tool_profiles(path: str | Path) -> dict[str, tuple[str, ...]]:
     if not isinstance(raw, dict):
         raise ValueError("tool profiles JSON must be an object mapping names to tool lists")
 
-    valid = set(VALID_TOOLS)
+    valid = set(VALID_TOOLS) | set(PROFILE_ONLY_TOOLS)
     profiles = {}
     for name, tools in raw.items():
         if not isinstance(name, str) or not name:

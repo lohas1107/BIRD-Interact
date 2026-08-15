@@ -11,5 +11,6 @@ python-dotenv>=1.0.0
 
 # Database and utilities
 psycopg2-binary>=2.9.9
+neo4j>=5.20.0,<6.0.0
 sqlglot>=23.0.0
 rich>=13.7.0
