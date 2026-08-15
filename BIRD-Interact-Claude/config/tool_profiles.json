@@ -15,10 +15,8 @@
     "submit_sql"
   ],
   "kg-v1": [
+    "get_knowledge",
     "get_table_schema",
-    "get_all_external_knowledge_names",
-    "get_knowledge_definition",
-    "get_all_knowledge_definitions",
     "ask_user",
     "execute_sql",
     "submit_sql"

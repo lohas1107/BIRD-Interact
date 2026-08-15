@@ -11,6 +11,9 @@
                                                    `--[:TO_COLUMN]->(:Column)
 
 (:Table)-[:JOINS_TO]->(:Table)
+
+(:Database)-[:HAS_KNOWLEDGE]->(:Knowledge)
+(:Knowledge)-[:REQUIRES {position}]->(:Knowledge)
 ```
 
 ### Node 屬性
@@ -46,6 +49,14 @@ scalar property 不建立，API 讀取時回傳 `null`。`Table.description` 是
 | `ForeignKey` | `cardinality` | string | 目前為 `many_to_one` 或 `one_to_one`，由 FK 與 primary key 關係推導。 |
 | `ForeignKey` | `nullable` | boolean | FK 來源 columns 是否有任一 column 可為 NULL。 |
 | `ForeignKey` | `entity_key` | string | ForeignKey 的穩定識別值，格式為 `{database_name}:foreign_key:{fk_key}`。 |
+| `Knowledge` | `id` | string | 全域唯一識別值，格式為 `{database}:{source_id}`，例如 `alien:10`。 |
+| `Knowledge` | `name` | string | 來源 JSONL 的 `knowledge` 名稱；不作為去重鍵。 |
+| `Knowledge` | `type` | string | 來源 JSONL 的 `type`，例如 `domain_knowledge`。 |
+| `Knowledge` | `summary` | string | 來源 JSONL 的 `description`；沒有時不建立 property。 |
+| `Knowledge` | `definition` | string | 來源 JSONL 的 `definition`；沒有時不建立 property。 |
+| `Knowledge` | `source_file` | string | 來源 JSONL 檔名，例如 `alien_kb.jsonl`。 |
+| `Knowledge` | `source_line` | integer | JSONL physical line number，從 1 開始。 |
+| `Knowledge` | `source_id` | integer | 來源 JSON 的原始非負整數 `id`。 |
 
 Graph 中沒有獨立的 `TableDescription`、`ColumnDescription` node，也沒有
 `HAS_DESCRIPTION` relationship。Column description properties 全部直接放
@@ -62,11 +73,122 @@ Graph 中沒有獨立的 `TableDescription`、`ColumnDescription` node，也沒�
 | `FROM_COLUMN` | `ForeignKey -> Column` | 無 | 指向 FK 來源 columns。 |
 | `TO_COLUMN` | `ForeignKey -> Column` | 無 | 指向 FK 目標 columns。 |
 | `JOINS_TO` | `Table -> Table` | `fk_key`, `from_columns`, `to_columns`, `join_condition`, `cardinality` | 由 declared FK 產生的 read projection；用於 direct joins 與 bounded shortest-path search。沒有獨立的 JoinPath node。 |
+| `HAS_KNOWLEDGE` | `Database -> Knowledge` | 無 | 將 Knowledge 限定在其 database namespace 內。 |
+| `REQUIRES` | `Knowledge -> Knowledge` | `position` | 表示 `children_knowledge[position]`；只在同一 database namespace 內建立。 |
 
 `JOINS_TO` 的方向固定為 FK 來源 table -> referenced table，但 API 查詢
 direct joins 與 join path 時會同時處理 outgoing/incoming traversal。所有
 `join_paths` 都只使用 `JOINS_TO`，因此只會返回由 declared foreign keys
 形成的 shortest paths。
+
+Knowledge graph 的 `Knowledge.id` 是唯一 constraint 的唯一鍵；`name` 不具
+唯一性，因此同名來源項目仍會各自保留，例如 `fake:74` 與 `fake:77`。Knowledge
+不保存 `snapshot_id`、`database_name` 或 `local_id`，也不建立 `KnowledgeSet`。
+child ID 一律在 parent 所屬 database namespace 內解析，不能建立跨 database 的
+`REQUIRES` edge。重新匯入時，mapping 會依各 database 的來源 ID 清除 stale
+Knowledge nodes 與舊 dependency edges，再重建目前來源的 node/edge projection。
+
+## `get_knowledge` 使用方式
+
+這是新的 graph API，endpoint 為 `POST /knowledge/graph`。它只接受 global
+Knowledge ID，不支援以 name lookup；model-facing tool request 不包含
+`task_id`，tool wrapper 會在送往 service 時內部補入 task ID。
+
+既有的 `POST /knowledge`、`/knowledge_names` 與其 legacy JSONL response
+保持不變；`/knowledge/graph` 不替換也不修改既有 `/knowledge` contract。
+
+### Request
+
+```json
+{
+  "id": "alien:10",
+  "include": ["summary", "definition", "provenance"],
+  "expand": {
+    "depth": 1,
+    "max_nodes": 20
+  }
+}
+```
+
+| 欄位 | 型別 | 必填 | 預設值/限制 | 使用方式 |
+| --- | --- | --- | --- | --- |
+| `id` | string | 是 | `<database>:<non-negative integer>` | database 必須是 canonical lowercase；例如 `alien:10`。只接受 global ID。 |
+| `include` | array[string] | 否 | `[]` | 可選值只有 `summary`、`definition`、`provenance`；重複值去重，省略時只回傳 identity fields。 |
+| `expand` | object | 否 | 不展開，只回 root | 提供時 `depth` 與 `max_nodes` 都必填；不可帶 `direction` 或其他欄位。 |
+| `expand.depth` | integer | 在 `expand` 中是 | `0..5` | 固定沿 `REQUIRES` 往 child 展開；沒有 direction 選項。 |
+| `expand.max_nodes` | integer | 在 `expand` 中是 | `1..50` | 回傳 node 上限，包含 root；沒有 pagination。 |
+
+`id` 的 database scope 由 `Database -[:HAS_KNOWLEDGE]-> Knowledge` 限定。
+traversal 使用 deterministic breadth-first search：先處理較近距離的 node，
+同一距離依 `REQUIRES.position` ascending；position 相同時依 parent 的 BFS 順序
+及 child ID 作 deterministic tie-break；node 已經出現時不重複加入。超過
+`max_nodes` 時保留 BFS 順序的前 N 個 node，並將 `truncated` 設為
+`true`。`depth` 上限本身不是 truncation；只有仍有可納入但因 node 上限被截掉
+的可見 node 時才是 `true`。`edges` 只包含兩端都在 response `nodes` 中的完整
+`REQUIRES` edges，因此不會回傳 dangling edge。
+
+### Response
+
+```json
+{
+  "root_id": "alien:10",
+  "nodes": [
+    {
+      "id": "alien:10",
+      "name": "Technosignature",
+      "type": "domain_knowledge",
+      "distance": 0,
+      "summary": "...",
+      "definition": "...",
+      "provenance": {
+        "source_file": "alien_kb.jsonl",
+        "source_line": 11,
+        "source_id": 10
+      }
+    },
+    {
+      "id": "alien:4",
+      "name": "Bandwidth-Frequency Ratio (BFR)",
+      "type": "calculation_knowledge",
+      "distance": 1,
+      "summary": "...",
+      "definition": "...",
+      "provenance": {
+        "source_file": "alien_kb.jsonl",
+        "source_line": 5,
+        "source_id": 4
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "alien:10",
+      "to": "alien:4",
+      "type": "REQUIRES",
+      "position": 0
+    }
+  ],
+  "truncated": false
+}
+```
+
+每個 node 永遠包含 `id`、`name`、`type`、`distance`。只有在 `include` 指定
+時才加入 `summary`、`definition` 或 `provenance`；`provenance` 包含
+`source_file`、`source_line`、`source_id`。root-only request、`depth=0` 或
+省略 `expand` 都只回 root，且 `truncated` 為 `false`。
+
+### Errors and task masking
+
+| HTTP | Code | 條件 |
+| ---: | --- | --- |
+| 400 | `INVALID_REQUEST` | ID、include 或 expand 格式/範圍錯誤。 |
+| 404 | `KNOWLEDGE_NOT_FOUND` | ID 不存在，或 root 被 task masking。兩者使用相同 response error，避免洩漏 hidden node 存在性。 |
+| 503 | `NEO4J_UNAVAILABLE` | Neo4j 無法連線、session 過期或 database 不可用。 |
+| 500 | `GRAPH_QUERY_FAILED` | 其他 Neo4j query failure。 |
+
+task masking 套用於新 API：root 被 mask 時整個 request 回
+`KNOWLEDGE_NOT_FOUND`；展開遇到 hidden dependency 時不回傳該 node，也不回傳
+相關 dangling edge，且 response metadata 不會透露 hidden node。
 
 ## `get_table_schema` 使用方式
 

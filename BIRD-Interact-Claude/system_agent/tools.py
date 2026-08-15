@@ -14,6 +14,7 @@ TOOL_COSTS = {
     "execute_sql": 1.0,
     "get_schema": 1.0,
     "get_table_schema": 1.0,
+    "get_knowledge": 1.0,
     "get_all_column_meanings": 1.0,
     "get_column_meaning": 0.5,
     "get_all_external_knowledge_names": 0.5,
@@ -172,6 +173,49 @@ def build_tool_server(state: dict, mode: str):
             return json.dumps(data, ensure_ascii=False)
         return await run_tool("get_table_schema", args, op)
 
+    @tool(
+        "get_knowledge",
+        "Get a Knowledge node and optionally expand its ordered REQUIRES dependencies from the kg-v1 graph. Cost: 1 bird-coin.",
+        {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]*:[0-9]+$",
+                    "description": "Canonical global Knowledge ID, for example alien:10.",
+                },
+                "include": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["summary", "definition", "provenance"],
+                    },
+                    "description": "Optional node sections; omitted means identity fields only.",
+                },
+                "expand": {
+                    "type": "object",
+                    "properties": {
+                        "depth": {"type": "integer", "minimum": 0, "maximum": 5},
+                        "max_nodes": {"type": "integer", "minimum": 1, "maximum": 50},
+                    },
+                    "required": ["depth", "max_nodes"],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+    )
+    async def get_knowledge(args):
+        async def op():
+            payload = {"task_id": task_id, "id": args["id"]}
+            for key in ("include", "expand"):
+                if key in args and args[key] is not None:
+                    payload[key] = args[key]
+            data = await call_service(settings.db_env_port, "/knowledge/graph", payload)
+            return json.dumps(data, ensure_ascii=False)
+        return await run_tool("get_knowledge", args, op)
+
     @tool("get_all_column_meanings", "Get all column descriptions. Cost: 1 bird-coin.", {})
     async def get_all_column_meanings(args):
         async def op():
@@ -282,7 +326,7 @@ def build_tool_server(state: dict, mode: str):
             return "\n".join(parts)
         return await run_tool("submit_sql", args, op)
 
-    all_tools = [execute_sql, get_schema, get_table_schema, get_all_column_meanings, get_column_meaning,
+    all_tools = [execute_sql, get_schema, get_table_schema, get_knowledge, get_all_column_meanings, get_column_meaning,
                  get_all_external_knowledge_names, get_knowledge_definition,
                  get_all_knowledge_definitions, ask_user, submit_sql]
     by_name = {item.name: item for item in all_tools}

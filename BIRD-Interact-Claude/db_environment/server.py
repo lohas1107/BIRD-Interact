@@ -18,10 +18,14 @@ from shared.db_utils import (
 )
 from shared.models import (
     ExecuteSQLRequest, ExecuteSQLResponse, InitTaskRequest,
-    SchemaRequest, TableSchemaRequest, ColumnMeaningRequest, KnowledgeRequest,
+    SchemaRequest, TableSchemaRequest, KnowledgeGraphRequest, ColumnMeaningRequest, KnowledgeRequest,
     SubmitSQLRequest, SubmitSQLResponse,
 )
-from db_environment.knowledge_graph import GraphSchemaError, Neo4jSchemaRepository
+from db_environment.knowledge_graph import (
+    GraphSchemaError,
+    Neo4jKnowledgeRepository,
+    Neo4jSchemaRepository,
+)
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="BIRD-Interact DB Environment", version="1.0.0")
@@ -36,6 +40,7 @@ _external_knowledge_cache: Dict[str, Dict] = {}
 _submit_attempts: Dict[str, Dict[int, int]] = {}
 _successful_phase1_sql: Dict[str, str] = {}
 _knowledge_graph = Neo4jSchemaRepository(settings)
+_knowledge_repository = Neo4jKnowledgeRepository(settings)
 
 
 def _load_db_data(db_name: str):
@@ -83,6 +88,27 @@ def _filter_knowledge(db_name: str, record: Dict) -> Dict:
         to_remove = [k for k, v in agent_kb.items() if v.get("id") in deleted_ids]
         for k in to_remove: del agent_kb[k]
     return agent_kb
+
+
+def _masked_knowledge_ids(db_name: str, record: Dict) -> set[str]:
+    """Return task-hidden IDs in the same namespace used by the graph API."""
+
+    masked: set[str] = set()
+    for ambiguity in record.get("knowledge_ambiguity", []):
+        if not isinstance(ambiguity, dict):
+            continue
+        deleted = ambiguity.get("deleted_knowledge")
+        if isinstance(deleted, bool):
+            continue
+        if isinstance(deleted, int) and deleted >= 0:
+            masked.add(f"{db_name.casefold()}:{deleted}")
+        elif isinstance(deleted, str):
+            value = deleted.strip()
+            if value.isdigit():
+                masked.add(f"{db_name.casefold()}:{int(value)}")
+            elif value:
+                masked.add(value)
+    return masked
 
 
 def _format_result(result, cursor_desc=None) -> str:
@@ -353,6 +379,27 @@ async def get_table_schema(req: TableSchemaRequest):
         ) from exc
 
 
+@app.post("/knowledge/graph")
+async def get_knowledge_graph(req: KnowledgeGraphRequest):
+    """Read the global-ID Knowledge graph with task-scoped masking."""
+
+    td = _task_data.get(req.task_id)
+    if not td:
+        raise HTTPException(404, f"Task {req.task_id} not initialized")
+    db_name = str(td.get("selected_database", "")).casefold()
+    try:
+        return await asyncio.to_thread(
+            _knowledge_repository.get_knowledge,
+            req,
+            _masked_knowledge_ids(db_name, td),
+        )
+    except GraphSchemaError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+
+
 @app.post("/all_column_meanings")
 async def get_all_column_meanings(req: SchemaRequest):
     td = _task_data.get(req.task_id)
@@ -435,7 +482,10 @@ async def health():
 
 @app.on_event("shutdown")
 async def close_knowledge_graph():
-    await asyncio.to_thread(_knowledge_graph.close)
+    await asyncio.gather(
+        asyncio.to_thread(_knowledge_graph.close),
+        asyncio.to_thread(_knowledge_repository.close),
+    )
 
 
 if __name__ == "__main__":

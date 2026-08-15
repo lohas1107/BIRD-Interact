@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Generate the kg-v1 physical-schema graph mapping.
 
-The generated mapping is intentionally source-derived and non-idempotent.  The
-import contract is ``reset.cypher`` -> ``schema.cypher`` -> ``mapping.cypher``
--> ``validate.cypher``; rerunning the mapping without the reset is therefore
-an error by design.
+The generated mapping is source-derived and rerunnable.  The first import
+requires ``schema.cypher``; ``reset.cypher`` remains available for a full graph
+refresh before ``schema.cypher`` -> ``mapping.cypher`` -> ``validate.cypher``.
 """
 
 from __future__ import annotations
@@ -247,6 +246,114 @@ def load_meanings(path: Path) -> dict[tuple[str, str], dict]:
     return result
 
 
+def parse_knowledge(path: Path, database_name: str) -> list[dict]:
+    """Read one database's JSONL knowledge source with physical line numbers.
+
+    Knowledge identifiers are scoped by database.  Keeping the source ID as an
+    integer while constructing the global string ID here prevents accidental
+    name-based deduplication (the source intentionally contains duplicate
+    display names in some databases).
+    """
+
+    entries: list[dict] = []
+    by_source_id: dict[int, dict] = {}
+    database_name = database_name.casefold()
+
+    try:
+        handle = path.open("r", encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"cannot read knowledge source {path}: {exc}") from exc
+
+    with handle:
+        for source_line, raw_line in enumerate(handle, start=1):
+            if not raw_line.strip():
+                continue
+            try:
+                source = json.loads(raw_line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"invalid JSON in {path}:{source_line}: {exc}") from exc
+            if not isinstance(source, dict):
+                raise ValueError(f"knowledge entry at {path}:{source_line} must be an object")
+
+            source_id = source.get("id")
+            if isinstance(source_id, bool) or not isinstance(source_id, int) or source_id < 0:
+                raise ValueError(
+                    f"knowledge entry at {path}:{source_line} has invalid non-negative integer id"
+                )
+            if source_id in by_source_id:
+                previous = by_source_id[source_id]["source_line"]
+                raise ValueError(
+                    f"duplicate knowledge id {database_name}:{source_id} at "
+                    f"{path}:{source_line} (previously at line {previous})"
+                )
+
+            name = source.get("knowledge")
+            source_type = source.get("type")
+            if not isinstance(name, str) or not name:
+                raise ValueError(f"knowledge entry at {path}:{source_line} has no string knowledge name")
+            if not isinstance(source_type, str) or not source_type:
+                raise ValueError(f"knowledge entry at {path}:{source_line} has no string type")
+
+            children = source.get("children_knowledge", -1)
+            if children == -1:
+                children = []
+            if (
+                not isinstance(children, list)
+                or any(
+                    isinstance(child_id, bool)
+                    or not isinstance(child_id, int)
+                    or child_id < 0
+                    for child_id in children
+                )
+            ):
+                raise ValueError(
+                    f"knowledge entry at {path}:{source_line} has invalid children_knowledge"
+                )
+
+            entry = {
+                "id": f"{database_name}:{source_id}",
+                "source_id": source_id,
+                "name": name,
+                "type": source_type,
+                "summary": source.get("description"),
+                "definition": source.get("definition"),
+                "source_file": path.name,
+                "source_line": source_line,
+                "children": list(children),
+            }
+            by_source_id[source_id] = entry
+            entries.append(entry)
+
+    known_ids = set(by_source_id)
+    for entry in entries:
+        missing = [child_id for child_id in entry["children"] if child_id not in known_ids]
+        if missing:
+            raise ValueError(
+                f"knowledge {entry['id']} references missing child id(s): "
+                + ", ".join(str(child_id) for child_id in missing)
+            )
+
+    # A dependency cycle would make depth-limited expansion ambiguous.  Check
+    # the source before emitting Cypher so malformed imports fail early.
+    visiting: set[int] = set()
+    visited: set[int] = set()
+
+    def visit(source_id: int) -> None:
+        if source_id in visiting:
+            raise ValueError(f"cycle detected in knowledge dependencies at {database_name}:{source_id}")
+        if source_id in visited:
+            return
+        visiting.add(source_id)
+        for child_id in by_source_id[source_id]["children"]:
+            visit(child_id)
+        visiting.remove(source_id)
+        visited.add(source_id)
+
+    for source_id in by_source_id:
+        visit(source_id)
+    return entries
+
+
 def emit(source_root: Path, output: Path) -> dict[str, int]:
     stats = {
         "databases": 0,
@@ -255,37 +362,48 @@ def emit(source_root: Path, output: Path) -> dict[str, int]:
         "foreign_keys": 0,
         "descriptions": 0,
         "missing_descriptions": 0,
+        "knowledge_nodes": 0,
+        "requires_edges": 0,
     }
     lines = [
         "// kg-v1 source mapping; generated by generate_mapping.py.",
-        "// Import only after reset.cypher and schema.cypher.",
-        "// This file intentionally uses CREATE, not MERGE; rerun the reset first.",
+        "// Run schema.cypher before the first import; this mapping is rerunnable.",
+        "// Physical-schema nodes are merged, and Knowledge nodes are source-reconciled.",
         "",
     ]
 
-    parsed_databases: list[tuple[str, list[dict], list[dict], dict[tuple[str, str], dict]]] = []
+    parsed_databases: list[
+        tuple[str, list[dict], list[dict], dict[tuple[str, str], dict], list[dict]]
+    ] = []
     for db_dir in sorted(path for path in source_root.iterdir() if path.is_dir()):
         schema_path = db_dir / f"{db_dir.name}_schema.txt"
         meanings_path = db_dir / f"{db_dir.name}_column_meaning_base.json"
+        knowledge_path = db_dir / f"{db_dir.name}_kb.jsonl"
         if not schema_path.exists():
             continue
+        database_name = db_dir.name.casefold()
         tables, foreign_keys = parse_schema(schema_path)
         meanings = load_meanings(meanings_path)
-        parsed_databases.append((db_dir.name, tables, foreign_keys, meanings))
+        knowledge = parse_knowledge(knowledge_path, database_name) if knowledge_path.exists() else []
+        parsed_databases.append((database_name, tables, foreign_keys, meanings, knowledge))
         stats["databases"] += 1
         stats["tables"] += len(tables)
         stats["columns"] += sum(len(table["columns"]) for table in tables)
         stats["foreign_keys"] += len(foreign_keys)
+        stats["knowledge_nodes"] += len(knowledge)
+        stats["requires_edges"] += sum(len(entry["children"]) for entry in knowledge)
 
-    for database_name, tables, foreign_keys, meanings in parsed_databases:
+    for database_name, tables, foreign_keys, meanings, _ in parsed_databases:
         database_key = database_name
         lines.append(
-            f"CREATE (n:Database {property_map({'database_name': database_name, 'entity_key': database_key})});"
+            f"MERGE (n:Database {{entity_key: {cypher(database_key)}}}) "
+            f"SET n = {property_map({'database_name': database_name, 'entity_key': database_key})};"
         )
         for table in tables:
             table_key = f"{database_name}:{table['name']}"
             lines.append(
-                f"CREATE (n:Table {property_map({'database_name': database_name, 'table_name': table['name'], 'description': '', 'entity_key': table_key})});"
+                f"MERGE (n:Table {{entity_key: {cypher(table_key)}}}) "
+                f"SET n = {property_map({'database_name': database_name, 'table_name': table['name'], 'description': '', 'entity_key': table_key})};"
             )
             for column in table["columns"]:
                 column_key = f"{table_key}:{column['name']}"
@@ -305,7 +423,10 @@ def emit(source_root: Path, output: Path) -> dict[str, int]:
                     "declared_type": documented["declared_type"] if documented else None,
                     "examples": documented["examples"] if documented else [],
                 }
-                lines.append(f"CREATE (n:Column {property_map(properties)});")
+                lines.append(
+                    f"MERGE (n:Column {{entity_key: {cypher(column_key)}}}) "
+                    f"SET n = {property_map(properties)};"
+                )
                 if documented:
                     stats["descriptions"] += 1
                 else:
@@ -322,23 +443,76 @@ def emit(source_root: Path, output: Path) -> dict[str, int]:
                 "nullable": foreign_key["nullable"],
                 "entity_key": entity_key,
             }
-            lines.append(f"CREATE (n:ForeignKey {property_map(properties)});")
+            lines.append(
+                f"MERGE (n:ForeignKey {{entity_key: {cypher(entity_key)}}}) "
+                f"SET n = {property_map(properties)};"
+            )
+
+    lines.append("")
+    lines.append("// Source-reconciled Knowledge nodes and relationships.")
+    for database_name, _, _, _, knowledge in parsed_databases:
+        knowledge_ids = [entry["id"] for entry in knowledge]
+        # Keep physical schema nodes untouched while removing stale knowledge
+        # records and dependency/containment edges for this source namespace.
+        lines.append(
+            f"MATCH (d:Database {{entity_key: {cypher(database_name)}}})-[r:HAS_KNOWLEDGE]->(:Knowledge) DELETE r;"
+        )
+        lines.append(
+            f"MATCH (parent:Knowledge)-[r:REQUIRES]->() "
+            f"WHERE parent.id STARTS WITH {cypher(database_name + ':')} DELETE r;"
+        )
+        lines.append(
+            f"MATCH (stale:Knowledge) WHERE stale.id STARTS WITH {cypher(database_name + ':')} "
+            f"AND NOT stale.id IN {cypher(knowledge_ids)} DETACH DELETE stale;"
+        )
+        for entry in knowledge:
+            properties = {
+                "id": entry["id"],
+                "name": entry["name"],
+                "type": entry["type"],
+                "summary": entry["summary"],
+                "definition": entry["definition"],
+                "source_file": entry["source_file"],
+                "source_line": entry["source_line"],
+                "source_id": entry["source_id"],
+            }
+            lines.append(
+                f"MERGE (n:Knowledge {{id: {cypher(entry['id'])}}}) "
+                f"SET n = {property_map(properties)};"
+            )
+
+    lines.append("")
+    lines.append("// Knowledge containment and ordered dependency edges.")
+    for database_name, _, _, _, knowledge in parsed_databases:
+        for entry in knowledge:
+            lines.append(
+                f"MATCH (d:Database {{entity_key: {cypher(database_name)}}}), "
+                f"(k:Knowledge {{id: {cypher(entry['id'])}}}) "
+                "MERGE (d)-[:HAS_KNOWLEDGE]->(k);"
+            )
+            for position, child_id in enumerate(entry["children"]):
+                child_key = f"{database_name}:{child_id}"
+                lines.append(
+                    f"MATCH (parent:Knowledge {{id: {cypher(entry['id'])}}}), "
+                    f"(child:Knowledge {{id: {cypher(child_key)}}}) "
+                    f"MERGE (parent)-[:REQUIRES {{position: {position}}}]->(child);"
+                )
 
     lines.append("")
     lines.append("// Canonical containment and FK edges.")
-    for database_name, tables, foreign_keys, _ in parsed_databases:
+    for database_name, tables, foreign_keys, _, _ in parsed_databases:
         database_key = database_name
         for table in tables:
             table_key = f"{database_name}:{table['name']}"
             lines.append(
                 f"MATCH (d:Database {{entity_key: {cypher(database_key)}}}), (t:Table {{entity_key: {cypher(table_key)}}}) "
-                "CREATE (d)-[:HAS_TABLE]->(t);"
+                "MERGE (d)-[:HAS_TABLE]->(t);"
             )
             for column in table["columns"]:
                 column_key = f"{table_key}:{column['name']}"
                 lines.append(
                     f"MATCH (t:Table {{entity_key: {cypher(table_key)}}}), (c:Column {{entity_key: {cypher(column_key)}}}) "
-                    "CREATE (t)-[:HAS_COLUMN]->(c);"
+                    "MERGE (t)-[:HAS_COLUMN]->(c);"
                 )
         for foreign_key in foreign_keys:
             fk_key = f"{database_name}:{foreign_key['fk_key']}"
@@ -347,23 +521,23 @@ def emit(source_root: Path, output: Path) -> dict[str, int]:
             to_table_key = f"{database_name}:{foreign_key['to_table']}"
             lines.append(
                 f"MATCH (t:Table {{entity_key: {cypher(from_table_key)}}}), (fk:ForeignKey {{entity_key: {cypher(fk_entity_key)}}}) "
-                "CREATE (t)-[:HAS_FOREIGN_KEY]->(fk);"
+                "MERGE (t)-[:HAS_FOREIGN_KEY]->(fk);"
             )
             lines.append(
                 f"MATCH (fk:ForeignKey {{entity_key: {cypher(fk_entity_key)}}}), (t:Table {{entity_key: {cypher(to_table_key)}}}) "
-                "CREATE (fk)-[:REFERENCES_TABLE]->(t);"
+                "MERGE (fk)-[:REFERENCES_TABLE]->(t);"
             )
             for column_name in foreign_key["from_columns"]:
                 column_key = f"{from_table_key}:{column_name}"
                 lines.append(
                     f"MATCH (fk:ForeignKey {{entity_key: {cypher(fk_entity_key)}}}), (c:Column {{entity_key: {cypher(column_key)}}}) "
-                    "CREATE (fk)-[:FROM_COLUMN]->(c);"
+                    "MERGE (fk)-[:FROM_COLUMN]->(c);"
                 )
             for column_name in foreign_key["to_columns"]:
                 column_key = f"{to_table_key}:{column_name}"
                 lines.append(
                     f"MATCH (fk:ForeignKey {{entity_key: {cypher(fk_entity_key)}}}), (c:Column {{entity_key: {cypher(column_key)}}}) "
-                    "CREATE (fk)-[:TO_COLUMN]->(c);"
+                    "MERGE (fk)-[:TO_COLUMN]->(c);"
                 )
 
             join_properties = {
@@ -375,7 +549,8 @@ def emit(source_root: Path, output: Path) -> dict[str, int]:
             }
             lines.append(
                 f"MATCH (a:Table {{entity_key: {cypher(from_table_key)}}}), (b:Table {{entity_key: {cypher(to_table_key)}}}) "
-                f"CREATE (a)-[:JOINS_TO {property_map(join_properties)}]->(b);"
+                f"MERGE (a)-[j:JOINS_TO {{fk_key: {cypher(fk_key)}}}]->(b) "
+                f"SET j = {property_map(join_properties)};"
             )
 
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -1,7 +1,9 @@
-"""Read-only kg-v1 Neo4j repository used by ``get_table_schema``."""
+"""Read-only kg-v1 Neo4j repositories for schema and Knowledge graph tools."""
 
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
 from threading import Lock
 from typing import Any
 
@@ -399,3 +401,305 @@ class Neo4jSchemaRepository:
             paths.append({"tables": table_names, "hops": hops})
         paths.sort(key=lambda path: (tuple(path["tables"]), tuple(hop["fk_key"] for hop in path["hops"])))
         return paths[:max_paths]
+
+
+KNOWLEDGE_ID_RE = re.compile(r"^(?P<database>[a-z][a-z0-9_]*):(?P<source_id>[0-9]+)$")
+KNOWLEDGE_INCLUDE = ("summary", "definition", "provenance")
+KNOWLEDGE_INCLUDE_SET = frozenset(KNOWLEDGE_INCLUDE)
+MAX_KNOWLEDGE_DEPTH = 5
+MAX_KNOWLEDGE_NODES = 50
+
+
+class KnowledgeGraphError(GraphSchemaError):
+    """Stable errors exposed by the global-ID knowledge graph API."""
+
+    STATUS_CODES = {
+        "INVALID_REQUEST": 400,
+        "KNOWLEDGE_NOT_FOUND": 404,
+        "NEO4J_UNAVAILABLE": 503,
+        "GRAPH_QUERY_FAILED": 500,
+    }
+
+
+class Neo4jKnowledgeRepository:
+    """Read-only repository for the kg-v1 ``Knowledge`` dependency graph."""
+
+    def __init__(self, config=settings):
+        self._config = config
+        self._driver = None
+        self._driver_lock = Lock()
+
+    def _get_driver(self):
+        if self._driver is None:
+            with self._driver_lock:
+                if self._driver is None:
+                    self._driver = GraphDatabase.driver(
+                        self._config.neo4j_uri,
+                        auth=(self._config.neo4j_user, self._config.neo4j_password),
+                    )
+        return self._driver
+
+    def close(self) -> None:
+        if self._driver is not None:
+            self._driver.close()
+            self._driver = None
+
+    @staticmethod
+    def _request_value(request: Any, key: str, default: Any = None) -> Any:
+        if isinstance(request, Mapping):
+            return request.get(key, default)
+        return getattr(request, key, default)
+
+    @classmethod
+    def _normalize(cls, request: Any) -> dict[str, Any]:
+        raw_id = cls._request_value(request, "id")
+        if not isinstance(raw_id, str):
+            raise KnowledgeGraphError("INVALID_REQUEST", "id must match <database>:<non-negative integer>")
+        match = KNOWLEDGE_ID_RE.fullmatch(raw_id)
+        if match is None:
+            raise KnowledgeGraphError("INVALID_REQUEST", "id must match <database>:<non-negative integer>")
+
+        database_name = match.group("database")
+        source_id = int(match.group("source_id"))
+        knowledge_id = f"{database_name}:{source_id}"
+
+        raw_include = cls._request_value(request, "include")
+        include = [] if raw_include is None else raw_include
+        if not isinstance(include, list) or any(not isinstance(value, str) for value in include):
+            raise KnowledgeGraphError("INVALID_REQUEST", "include must be a list of strings")
+        unknown = sorted(set(include) - KNOWLEDGE_INCLUDE_SET)
+        if unknown:
+            raise KnowledgeGraphError(
+                "INVALID_REQUEST",
+                f"include contains unsupported values: {', '.join(unknown)}",
+            )
+        include = list(dict.fromkeys(include))
+
+        raw_expand = cls._request_value(request, "expand")
+        expand = None
+        if raw_expand is not None:
+            if isinstance(raw_expand, Mapping):
+                expand_values = dict(raw_expand)
+            elif hasattr(raw_expand, "model_dump"):
+                expand_values = raw_expand.model_dump(exclude_unset=False)
+            else:
+                expand_values = {
+                    key: getattr(raw_expand, key)
+                    for key in ("depth", "max_nodes")
+                    if hasattr(raw_expand, key)
+                }
+            unknown_expand = sorted(set(expand_values) - {"depth", "max_nodes"})
+            if unknown_expand or "depth" not in expand_values or "max_nodes" not in expand_values:
+                raise KnowledgeGraphError(
+                    "INVALID_REQUEST",
+                    "expand must contain exactly depth and max_nodes",
+                )
+            depth = expand_values["depth"]
+            max_nodes = expand_values["max_nodes"]
+            if isinstance(depth, bool) or not isinstance(depth, int) or not 0 <= depth <= MAX_KNOWLEDGE_DEPTH:
+                raise KnowledgeGraphError(
+                    "INVALID_REQUEST",
+                    "expand.depth must be an integer from 0 through 5",
+                )
+            if isinstance(max_nodes, bool) or not isinstance(max_nodes, int) or not 1 <= max_nodes <= MAX_KNOWLEDGE_NODES:
+                raise KnowledgeGraphError(
+                    "INVALID_REQUEST",
+                    "expand.max_nodes must be an integer from 1 through 50",
+                )
+            expand = {"depth": depth, "max_nodes": max_nodes}
+
+        return {
+            "database_name": database_name,
+            "root_id": knowledge_id,
+            "include": include,
+            "expand": expand,
+        }
+
+    @staticmethod
+    def _normalize_hidden_ids(database_name: str, hidden_ids: Any) -> list[str]:
+        if hidden_ids is None:
+            return []
+        if isinstance(hidden_ids, (str, bytes)) or not hasattr(hidden_ids, "__iter__"):
+            hidden_ids = [hidden_ids]
+        normalized = set()
+        for hidden_id in hidden_ids:
+            if isinstance(hidden_id, bool):
+                continue
+            if isinstance(hidden_id, int) and hidden_id >= 0:
+                normalized.add(f"{database_name}:{hidden_id}")
+            elif isinstance(hidden_id, str):
+                match = KNOWLEDGE_ID_RE.fullmatch(hidden_id)
+                if match is not None:
+                    normalized.add(f"{match.group('database')}:{int(match.group('source_id'))}")
+        return sorted(normalized)
+
+    def get_knowledge(self, request: Any, hidden_ids: Any = None) -> dict[str, Any]:
+        query = self._normalize(request)
+        request_hidden_ids = self._request_value(request, "hidden_ids")
+        if hidden_ids is None:
+            hidden_ids = request_hidden_ids
+        query["hidden_ids"] = self._normalize_hidden_ids(query["database_name"], hidden_ids)
+        try:
+            driver = self._get_driver()
+            with driver.session(
+                database=self._config.neo4j_database,
+                default_access_mode=READ_ACCESS,
+            ) as session:
+                return session.execute_read(self._read_knowledge, query)
+        except GraphSchemaError:
+            raise
+        except (
+            neo4j_exceptions.ServiceUnavailable,
+            neo4j_exceptions.SessionExpired,
+            neo4j_exceptions.AuthError,
+            neo4j_exceptions.DatabaseNotFound,
+        ) as exc:
+            raise KnowledgeGraphError("NEO4J_UNAVAILABLE", str(exc) or "Neo4j is unavailable") from exc
+        except neo4j_exceptions.Neo4jError as exc:
+            raise KnowledgeGraphError("GRAPH_QUERY_FAILED", str(exc) or "Neo4j query failed") from exc
+        except OSError as exc:
+            raise KnowledgeGraphError("NEO4J_UNAVAILABLE", str(exc) or "Neo4j is unavailable") from exc
+
+    @staticmethod
+    def _node_from_record(record: Any) -> dict[str, Any]:
+        raw_node = record["node"]
+        if isinstance(raw_node, Mapping):
+            return dict(raw_node)
+        try:
+            return dict(raw_node)
+        except (TypeError, ValueError):
+            raise KnowledgeGraphError("GRAPH_QUERY_FAILED", "Neo4j returned an invalid Knowledge node")
+
+    @staticmethod
+    def _node_payload(node: dict[str, Any], distance: int, include: set[str]) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "id": node.get("id"),
+            "name": node.get("name"),
+            "type": node.get("type"),
+            "distance": distance,
+        }
+        if "summary" in include:
+            payload["summary"] = node.get("summary")
+        if "definition" in include:
+            payload["definition"] = node.get("definition")
+        if "provenance" in include:
+            payload["provenance"] = {
+                "source_file": node.get("source_file"),
+                "source_line": node.get("source_line"),
+                "source_id": node.get("source_id"),
+            }
+        return payload
+
+    @staticmethod
+    def _read_root(tx, query: dict[str, Any]) -> dict[str, Any]:
+        record = tx.run(
+            """
+            MATCH (d:Database {database_name: $database_name})-[:HAS_KNOWLEDGE]->(k:Knowledge)
+            WHERE k.id = $root_id AND NOT k.id IN $hidden_ids
+            RETURN k { .id, .name, .type, .summary, .definition,
+                       .source_file, .source_line, .source_id } AS node
+            LIMIT 1
+            """,
+            database_name=query["database_name"],
+            root_id=query["root_id"],
+            hidden_ids=query["hidden_ids"],
+        ).single()
+        if record is None:
+            raise KnowledgeGraphError(
+                "KNOWLEDGE_NOT_FOUND",
+                f"knowledge {query['root_id']!r} does not exist or is not visible",
+            )
+        return Neo4jKnowledgeRepository._node_from_record(record)
+
+    @staticmethod
+    def _read_children(tx, query: dict[str, Any], parent_ids: list[str]) -> list[Any]:
+        if not parent_ids:
+            return []
+        result = tx.run(
+            """
+            UNWIND range(0, size($parent_ids) - 1) AS parent_index
+            MATCH (d:Database {database_name: $database_name})-[:HAS_KNOWLEDGE]->(parent:Knowledge)
+            WHERE parent.id = $parent_ids[parent_index]
+              AND NOT parent.id IN $hidden_ids
+            MATCH (d)-[:HAS_KNOWLEDGE]->(child:Knowledge)
+            MATCH (parent)-[r:REQUIRES]->(child)
+            WHERE child.id STARTS WITH $database_prefix
+              AND NOT child.id IN $hidden_ids
+            RETURN parent.id AS parent_id,
+                   r.position AS position,
+                   child { .id, .name, .type, .summary, .definition,
+                           .source_file, .source_line, .source_id } AS node
+            ORDER BY position, parent_index, child.id
+            """,
+            database_name=query["database_name"],
+            database_prefix=query["database_name"] + ":",
+            parent_ids=parent_ids,
+            hidden_ids=query["hidden_ids"],
+        )
+        return list(result)
+
+    @staticmethod
+    def _read_knowledge(tx, query: dict[str, Any]) -> dict[str, Any]:
+        include = set(query["include"])
+        root = Neo4jKnowledgeRepository._read_root(tx, query)
+        root_id = query["root_id"]
+        nodes: dict[str, dict[str, Any]] = {root_id: root}
+        distances = {root_id: 0}
+        ordered_ids = [root_id]
+        frontier = [root_id]
+        edges: list[dict[str, Any]] = []
+        truncated = False
+        expand = query["expand"]
+
+        if expand is not None:
+            depth_limit = expand["depth"]
+            max_nodes = expand["max_nodes"]
+            for distance in range(depth_limit):
+                if not frontier:
+                    break
+                records = Neo4jKnowledgeRepository._read_children(tx, query, frontier)
+                parent_order = {parent_id: index for index, parent_id in enumerate(frontier)}
+                records.sort(
+                    key=lambda record: (
+                        record["position"],
+                        parent_order.get(record["parent_id"], len(frontier)),
+                        str(record["node"].get("id")),
+                    )
+                )
+                next_frontier: list[str] = []
+                for record in records:
+                    child = Neo4jKnowledgeRepository._node_from_record(record)
+                    child_id = child.get("id")
+                    parent_id = record["parent_id"]
+                    position = record["position"]
+                    edges.append({
+                        "from": parent_id,
+                        "to": child_id,
+                        "type": "REQUIRES",
+                        "position": position,
+                    })
+                    if child_id in nodes:
+                        continue
+                    if len(nodes) >= max_nodes:
+                        truncated = True
+                        continue
+                    nodes[child_id] = child
+                    distances[child_id] = distance + 1
+                    ordered_ids.append(child_id)
+                    next_frontier.append(child_id)
+                frontier = next_frontier
+
+        visible_ids = set(nodes)
+        response_edges = [
+            edge for edge in edges
+            if edge["from"] in visible_ids and edge["to"] in visible_ids
+        ]
+        return {
+            "root_id": root_id,
+            "nodes": [
+                Neo4jKnowledgeRepository._node_payload(nodes[node_id], distances[node_id], include)
+                for node_id in ordered_ids
+            ],
+            "edges": response_edges,
+            "truncated": truncated,
+        }

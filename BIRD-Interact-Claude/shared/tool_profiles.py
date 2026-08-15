@@ -23,7 +23,7 @@ VALID_TOOLS = (
 
 # kg-v1 is an explicitly selected graph profile and is intentionally not part
 # of the legacy a-interact default allowlist.
-PROFILE_ONLY_TOOLS = ("get_table_schema",)
+PROFILE_ONLY_TOOLS = ("get_table_schema", "get_knowledge")
 
 DEFAULT_PROFILES = {
     "a-interact": "a-interact-default",

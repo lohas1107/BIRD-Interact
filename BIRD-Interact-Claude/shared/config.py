@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     user_sim_port: int = 6001
     db_env_port: int = 6002
 
-    # kg-v1 Neo4j physical-schema graph
+    # kg-v1 Neo4j physical-schema and Knowledge graph
     neo4j_uri: str = "bolt://127.0.0.1:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "bird-interact-dev"

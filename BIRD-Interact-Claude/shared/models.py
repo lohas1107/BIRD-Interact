@@ -1,6 +1,6 @@
 """Pydantic models for inter-service communication."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Any, Dict, List, Optional
 
 
@@ -46,6 +46,21 @@ class TableSchemaRequest(BaseModel):
     include: Optional[List[str]] = None
     max_hops: Optional[int] = 5
     max_paths: Optional[int] = 5
+
+
+class KnowledgeGraphExpandRequest(BaseModel):
+    # Keep validation in the graph repository so malformed requests use the
+    # stable INVALID_REQUEST error contract instead of FastAPI's 422 shape.
+    model_config = ConfigDict(extra="allow")
+    depth: Any = None
+    max_nodes: Any = None
+
+
+class KnowledgeGraphRequest(BaseModel):
+    task_id: str
+    id: Any = None
+    include: Any = None
+    expand: Any = None
 
 
 class ColumnMeaningRequest(BaseModel):

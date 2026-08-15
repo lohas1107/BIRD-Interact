@@ -10,4 +10,5 @@ DROP CONSTRAINT kg_v1_database_entity_key IF EXISTS;
 DROP CONSTRAINT kg_v1_table_entity_key IF EXISTS;
 DROP CONSTRAINT kg_v1_column_entity_key IF EXISTS;
 DROP CONSTRAINT kg_v1_foreign_key_entity_key IF EXISTS;
+DROP CONSTRAINT kg_v1_knowledge_id IF EXISTS;
 DROP INDEX kg_v1_table_lookup IF EXISTS;

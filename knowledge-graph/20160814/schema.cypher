@@ -13,5 +13,8 @@ FOR (n:Column) REQUIRE n.entity_key IS UNIQUE;
 CREATE CONSTRAINT kg_v1_foreign_key_entity_key IF NOT EXISTS
 FOR (n:ForeignKey) REQUIRE n.entity_key IS UNIQUE;
 
+CREATE CONSTRAINT kg_v1_knowledge_id IF NOT EXISTS
+FOR (n:Knowledge) REQUIRE n.id IS UNIQUE;
+
 CREATE INDEX kg_v1_table_lookup IF NOT EXISTS
 FOR (n:Table) ON (n.database_name, n.table_name);

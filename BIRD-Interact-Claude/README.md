@@ -163,6 +163,8 @@ Available names are:
 ```text
 execute_sql
 get_schema
+get_table_schema
+get_knowledge
 get_all_column_meanings
 get_column_meaning
 get_all_external_knowledge_names
