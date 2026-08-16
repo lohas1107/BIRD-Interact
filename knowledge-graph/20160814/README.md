@@ -238,7 +238,7 @@ The `kg-v1` tools and costs are:
 
 | Tool | Cost |
 | --- | ---: |
-| `search_semantic_context` | 1.0 |
+| `search_semantic_context` | 2.0 |
 | `get_knowledge` | 0.5 |
 | `get_table_schema` | 0.5 |
 | `ask_user` | 2.0 |

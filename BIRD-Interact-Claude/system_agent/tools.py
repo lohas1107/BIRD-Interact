@@ -13,7 +13,7 @@ from shared.config import settings
 TOOL_COSTS = {
     "execute_sql": 1.0,
     "get_schema": 1.0,
-    "search_semantic_context": 1.0,
+    "search_semantic_context": 2.0,
     "get_table_schema": 0.5,
     "get_knowledge": 0.5,
     "get_all_column_meanings": 1.0,
@@ -206,7 +206,7 @@ def build_tool_server(state: dict, mode: str):
 
     @tool(
         "search_semantic_context",
-        "Discover candidate Knowledge definitions and table-schema entries with exact-text and semantic retrieval. Search the exact metric name and its natural-language phrase together when needed. Results are candidates, not semantic confirmation; if no authoritative definition is returned, or only related columns/candidates appear, stop repeating searches and use ask_user to obtain the exact definition, formula, threshold, conditions, and validity rule. Cost: 1 bird-coin.",
+        "Discover candidate Knowledge definitions and table-schema entries with exact-text and semantic retrieval. Search the exact metric name and its natural-language phrase together when needed. Results are candidates, not semantic confirmation; if no authoritative definition is returned, or only related columns/candidates appear, stop repeating searches and use ask_user to obtain the exact definition, formula, threshold, conditions, and validity rule. Cost: 2 bird-coins.",
         {
             "type": "object",
             "properties": {
