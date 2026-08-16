@@ -206,7 +206,7 @@ def build_tool_server(state: dict, mode: str):
 
     @tool(
         "search_semantic_context",
-        "Discover candidate Knowledge definitions and table-schema entries with exact-text and semantic retrieval. Results are separate candidates, not semantic confirmation; inspect the matching Knowledge definition before using a metric. Cost: 1 bird-coin.",
+        "Discover candidate Knowledge definitions and table-schema entries with exact-text and semantic retrieval. Search the exact metric name and its natural-language phrase together when needed. Results are candidates, not semantic confirmation; if no authoritative definition is returned, or only related columns/candidates appear, stop repeating searches and use ask_user to obtain the exact definition, formula, threshold, conditions, and validity rule. Cost: 1 bird-coin.",
         {
             "type": "object",
             "properties": {
@@ -377,7 +377,7 @@ def build_tool_server(state: dict, mode: str):
 
     @tool(
         "ask_user",
-        "Ask one focused clarification question. The user-simulator answer is returned synchronously in this same tool call; use that answer before continuing. Cost: 2 bird-coins.",
+        "Ask one focused clarification question when a required metric, definition, formula, threshold, condition, or validity rule is unresolved. Request the exact missing semantic detail rather than asking a broad question or offering an inferred choice. The answer is returned synchronously in this same tool call; incorporate it into the semantic mapping before continuing. Cost: 2 bird-coins.",
         {"question": str},
     )
     async def ask_user(args):
@@ -413,7 +413,7 @@ def build_tool_server(state: dict, mode: str):
 
     @tool(
         "submit_sql",
-        "Submit the current phase's PostgreSQL query for evaluation. Call only after semantic grounding and output-shape checks. This is the only tool allowed one final budget overdraw; when it exhausts the budget, the session becomes terminal and cannot retry or enter Phase 2. Cost: 3 bird-coins.",
+        "Submit the current phase's PostgreSQL query for evaluation. Before calling, verify formula operators/constants/NULL rules, every filter/CASE/HAVING threshold and condition, every join key/type/cardinality, output row grain and counted entity, final SELECT columns and aliases, JSON aggregate/key/value-object shape when requested, and ASC/DESC ordering plus LIMIT. Do not submit a guessed formula, changed group grain, extra diagnostic column, or substituted JSON shape. This is the only tool allowed one final budget overdraw; when it exhausts the budget, the session becomes terminal and cannot retry or enter Phase 2. Cost: 3 bird-coins.",
         {"sql": str},
     )
     async def submit_sql(args):
