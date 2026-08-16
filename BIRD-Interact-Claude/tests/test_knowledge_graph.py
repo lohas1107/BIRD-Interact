@@ -322,7 +322,7 @@ class SemanticSearchRepositoryTests(unittest.TestCase):
             with self.subTest(request=request), self.assertRaises(GraphSchemaError):
                 SemanticSearchRepository._normalize(request)
 
-    def test_score_normalization_and_qwen_query_text(self):
+    def test_score_normalization_and_query_text(self):
         self.assertEqual(
             SemanticSearchRepository._normalize_fulltext_scores({"a": 2.0, "b": 4.0}),
             {"a": 0.0, "b": 1.0},

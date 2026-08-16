@@ -106,7 +106,7 @@ RETURN count(n) AS searchable_nodes_without_embedding_model,
        0 AS expected_searchable_nodes_without_embedding_model;
 
 MATCH (n:SemanticSearch)
-WHERE n.embedding IS NOT NULL AND size(n.embedding) <> 1024
+WHERE n.embedding IS NOT NULL AND size(n.embedding) <> 1536
 RETURN count(n) AS invalid_embedding_dimensions, 0 AS expected_invalid_embedding_dimensions;
 
 SHOW CONSTRAINTS;

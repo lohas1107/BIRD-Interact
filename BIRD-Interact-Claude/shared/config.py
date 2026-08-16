@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     embedding_service_port: int = 6003
     embedding_service_url: str = "http://127.0.0.1:6003"
     embedding_timeout: float = 60.0
-    embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
-    embedding_dimensions: int = 1024
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
 
     # kg-v1 Neo4j physical-schema and Knowledge graph
     neo4j_uri: str = "bolt://127.0.0.1:7687"

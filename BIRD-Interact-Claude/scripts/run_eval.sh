@@ -13,7 +13,9 @@ export PYTHONPATH="$PROJECT_DIR"
 
 # Start services if not running
 SYSTEM_PORT="${SYSTEM_AGENT_PORT:-6000}"
-if ! curl --noproxy '*' -s "http://127.0.0.1:$SYSTEM_PORT/health" > /dev/null 2>&1; then
+EMBEDDING_PORT="${EMBEDDING_SERVICE_PORT:-6003}"
+if ! curl --noproxy '*' -s "http://127.0.0.1:$SYSTEM_PORT/health" > /dev/null 2>&1 || \
+   ! curl --noproxy '*' -s "http://127.0.0.1:$EMBEDDING_PORT/health" > /dev/null 2>&1; then
     echo "Starting services..."
     bash "$PROJECT_DIR/scripts/start_services.sh"
 fi

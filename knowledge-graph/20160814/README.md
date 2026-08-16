@@ -16,11 +16,12 @@ reset.cypher (isolated instance only)
 `reset.cypher` is destructive and must not be run against a shared or existing
 database. Use a temporary Neo4j instance or namespace for validation.
 
-For the isolated Compose services, start Neo4j and the embedding service from
-`BIRD-Interact-Claude`:
+For an isolated Neo4j instance, start Neo4j with Compose and start the local
+application/embedding services from `BIRD-Interact-Claude`:
 
 ```bash
-docker compose --profile kg up -d neo4j embedding
+docker compose --profile kg up -d neo4j
+bash scripts/start_services.sh
 python knowledge-graph/20160814/generate_mapping.py
 python knowledge-graph/20160814/import_embeddings.py
 ```
@@ -61,7 +62,7 @@ All graph nodes use `id` as their canonical identity:
 
 Knowledge, Table and Column also have the `SemanticSearch` secondary label.
 Semantic-search nodes contain `search_text`; after embedding import they contain a
-1024-dimensional `embedding` and `embedding_model`.
+1536-dimensional `embedding` and `embedding_model`.
 
 Knowledge stores `name`, `type`, `description`, `definition`, `source_file`,
 `source_line` and `source_id`. Column stores `column_name`, `column_type`,
@@ -91,9 +92,9 @@ edges and 1,224 Knowledge-to-column edges.
 
 - full-text index `semantic_search_text` on `SemanticSearch.search_text`;
 - vector index `semantic_search_embedding` on `SemanticSearch.embedding`;
-- vector dimensions `1024` and cosine similarity.
+- vector dimensions `1536` and cosine similarity.
 
-The embedding model is `Qwen/Qwen3-Embedding-0.6B`. The independent embedding
+The embedding model is OpenAI `text-embedding-3-small`. The local `embedding`
 service exposes `POST /embed`:
 
 ```json
@@ -106,13 +107,8 @@ It returns `embeddings`, `model` and `dimensions`. `import_embeddings.py`
 reads all `SemanticSearch` documents, batches them through this endpoint and
 updates the Neo4j nodes. Documents are sent without a query instruction.
 
-For semantic queries the search repository sends Qwen's instruction-aware
-format:
-
-```text
-<Instruct>: Retrieve relevant knowledge definitions or table columns for resolving an ambiguous SQL request.
-<Query>: {query}
-```
+For semantic queries the search repository sends the raw query text to the same
+gateway. Set `OPENAI_API_KEY` before running `scripts/start_services.sh`.
 
 ## `search_semantic_context`
 

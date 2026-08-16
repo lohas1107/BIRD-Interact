@@ -62,32 +62,8 @@ services:
       retries: 12
       start_period: 45s
 
-  embedding:
-    build:
-      context: .
-      dockerfile: embedding_service/Dockerfile
-    container_name: bird_interact_embedding
-    profiles: ["kg"]
-    environment:
-      EMBEDDING_MODEL: "Qwen/Qwen3-Embedding-0.6B"
-      EMBEDDING_DIMENSIONS: "1024"
-      EMBEDDING_SERVICE_PORT: "6003"
-    volumes:
-      - embedding_hf_cache:/root/.cache/huggingface
-    ports:
-      - "6003:6003"
-    healthcheck:
-      test:
-        - "CMD-SHELL"
-        - "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:6003/health')\""
-      interval: 15s
-      timeout: 5s
-      retries: 12
-      start_period: 60s
-
 volumes:
   postgresql_data:
   postgresql_data_full:
   neo4j_data:
   neo4j_logs:
-  embedding_hf_cache:

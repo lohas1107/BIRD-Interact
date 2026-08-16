@@ -769,12 +769,7 @@ class Neo4jKnowledgeRepository:
 SEARCH_RESOURCE_TYPES = ("knowledge", "table_schema")
 SEARCH_RESOURCE_SET = frozenset(SEARCH_RESOURCE_TYPES)
 SEARCH_INDEX_CANDIDATES = 100
-SEARCH_EMBEDDING_DIMENSIONS = 1024
-QWEN_QUERY_INSTRUCTION = (
-    "<Instruct>: Retrieve relevant knowledge definitions or table columns for "
-    "resolving an ambiguous SQL request.\n"
-    "<Query>: {query}"
-)
+SEARCH_EMBEDDING_DIMENSIONS = 1536
 
 
 class SemanticSearchRepository:
@@ -879,9 +874,7 @@ class SemanticSearchRepository:
             raise GraphSchemaError("NEO4J_UNAVAILABLE", str(exc) or "Neo4j is unavailable") from exc
 
     def _embed_queries(self, queries: list[str]) -> list[list[float]]:
-        payload = {
-            "texts": [QWEN_QUERY_INSTRUCTION.format(query=query) for query in queries],
-        }
+        payload = {"texts": queries}
         try:
             with httpx.Client(
                 timeout=self._config.embedding_timeout,

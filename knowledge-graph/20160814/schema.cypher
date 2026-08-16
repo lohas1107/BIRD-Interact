@@ -27,6 +27,6 @@ CREATE VECTOR INDEX semantic_search_embedding IF NOT EXISTS
 FOR (n:SemanticSearch)
 ON (n.embedding)
 OPTIONS {indexConfig: {
-  `vector.dimensions`: 1024,
+  `vector.dimensions`: 1536,
   `vector.similarity_function`: 'cosine'
 }};
