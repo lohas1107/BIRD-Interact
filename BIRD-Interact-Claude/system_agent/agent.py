@@ -29,11 +29,15 @@ def instruction_for(mode: str, state: dict) -> str:
             lines.append("Use get_schema when database structure is needed.")
         if "get_table_schema" in tools:
             lines.append(
-                "Use get_table_schema for targeted table columns, descriptions, constraints, and joins; provide database_name and from_table, and add to_table when a join path is needed."
+                "Use get_table_schema for targeted table columns, descriptions, constraints, and joins; provide the task database_name and from_table, and add to_table when a join path is needed."
+            )
+        if "search_semantic_context" in tools:
+            lines.append(
+                "Use search_semantic_context first when the relevant Knowledge ID or column is unclear; it returns separately ranked Knowledge and table_schema results."
             )
         if "get_knowledge" in tools:
             lines.append(
-                "Use get_knowledge with a global Knowledge ID such as alien:10; it supports identity projection and optional REQUIRES dependency expansion."
+                "Use get_knowledge with knowledge_id such as alien:10; request description, definition, provenance, or related_columns when needed, and use expand.depth/expand.nodes for DEPENDS_ON dependencies."
             )
         knowledge_tools = [name for name in tools if "knowledge" in name or "meaning" in name]
         if knowledge_tools:
@@ -88,8 +92,10 @@ def task_turn_instruction(mode: str, state: dict, user_query: str, budget: float
         lines.append("Use get_schema if you need to inspect the database structure.")
     if "get_table_schema" in tools:
         lines.append("Use get_table_schema for targeted schema and join information; add to_table when you need join_paths.")
+    if "search_semantic_context" in tools:
+        lines.append("Use search_semantic_context to find relevant Knowledge definitions and columns before choosing graph IDs or table names.")
     if "get_knowledge" in tools:
-        lines.append("Use get_knowledge with a global Knowledge ID such as alien:10 when a dependency graph or definition is needed.")
+        lines.append("Use get_knowledge with knowledge_id such as alien:10 when a dependency graph or definition is needed.")
     if any("knowledge" in name or "meaning" in name for name in tools):
         lines.append("Use the available semantic tools if you need domain definitions.")
     if "ask_user" in tools:

@@ -18,13 +18,15 @@ from shared.db_utils import (
 )
 from shared.models import (
     ExecuteSQLRequest, ExecuteSQLResponse, InitTaskRequest,
-    SchemaRequest, TableSchemaRequest, KnowledgeGraphRequest, ColumnMeaningRequest, KnowledgeRequest,
+    SchemaRequest, TableSchemaRequest, KnowledgeGraphRequest, SearchSemanticContextRequest,
+    ColumnMeaningRequest, KnowledgeRequest,
     SubmitSQLRequest, SubmitSQLResponse,
 )
 from db_environment.knowledge_graph import (
     GraphSchemaError,
     Neo4jKnowledgeRepository,
     Neo4jSchemaRepository,
+    SemanticSearchRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ _submit_attempts: Dict[str, Dict[int, int]] = {}
 _successful_phase1_sql: Dict[str, str] = {}
 _knowledge_graph = Neo4jSchemaRepository(settings)
 _knowledge_repository = Neo4jKnowledgeRepository(settings)
+_semantic_search = SemanticSearchRepository(settings)
 
 
 def _load_db_data(db_name: str):
@@ -366,12 +369,44 @@ async def get_schema(req: SchemaRequest):
 @app.post("/table_schema")
 @app.post("/get_table_schema")
 async def get_table_schema(req: TableSchemaRequest):
-    """Read the kg-v1 schema graph without consulting task-selected DB state."""
+    """Read schema graph scoped to the task's selected database."""
 
-    if req.task_id not in _task_data:
+    td = _task_data.get(req.task_id)
+    if not td:
         raise HTTPException(404, f"Task {req.task_id} not initialized")
+    selected_database = str(td.get("selected_database", "")).casefold()
+    if req.database_name.strip().casefold() != selected_database:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INVALID_REQUEST",
+                "message": "database_name must match the task selected database",
+            },
+        )
     try:
         return await asyncio.to_thread(_knowledge_graph.get_table_schema, req)
+    except GraphSchemaError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+
+
+@app.post("/search/semantic_context")
+async def search_semantic_context(req: SearchSemanticContextRequest):
+    """Search task-visible Knowledge and column semantic context."""
+
+    td = _task_data.get(req.task_id)
+    if not td:
+        raise HTTPException(404, f"Task {req.task_id} not initialized")
+    db_name = str(td.get("selected_database", "")).casefold()
+    try:
+        return await asyncio.to_thread(
+            _semantic_search.search,
+            req,
+            db_name,
+            _masked_knowledge_ids(db_name, td),
+        )
     except GraphSchemaError as exc:
         raise HTTPException(
             status_code=exc.status_code,
@@ -392,6 +427,7 @@ async def get_knowledge_graph(req: KnowledgeGraphRequest):
             _knowledge_repository.get_knowledge,
             req,
             _masked_knowledge_ids(db_name, td),
+            db_name,
         )
     except GraphSchemaError as exc:
         raise HTTPException(
@@ -485,6 +521,7 @@ async def close_knowledge_graph():
     await asyncio.gather(
         asyncio.to_thread(_knowledge_graph.close),
         asyncio.to_thread(_knowledge_repository.close),
+        asyncio.to_thread(_semantic_search.close),
     )
 
 

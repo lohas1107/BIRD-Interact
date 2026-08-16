@@ -21,7 +21,8 @@ class ToolProfileTests(unittest.TestCase):
         return tmp.name
 
     def test_defaults_match_existing_tool_sets(self):
-        self.assertEqual(resolve_tool_profile("a-interact").tools, VALID_TOOLS)
+        self.assertEqual(set(resolve_tool_profile("a-interact").tools), set(VALID_TOOLS))
+        self.assertNotIn("search_semantic_context", resolve_tool_profile("a-interact").tools)
         self.assertEqual(resolve_tool_profile("c-interact").tools, ("ask_user", "submit_sql"))
 
     def test_custom_order_controls_server_allowlist_and_prompt(self):

@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     system_agent_port: int = 6000
     user_sim_port: int = 6001
     db_env_port: int = 6002
+    embedding_service_port: int = 6003
+    embedding_service_url: str = "http://127.0.0.1:6003"
+    embedding_timeout: float = 60.0
+    embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
+    embedding_dimensions: int = 1024
 
     # kg-v1 Neo4j physical-schema and Knowledge graph
     neo4j_uri: str = "bolt://127.0.0.1:7687"

@@ -13,8 +13,9 @@ from shared.config import settings
 TOOL_COSTS = {
     "execute_sql": 1.0,
     "get_schema": 1.0,
-    "get_table_schema": 1.0,
-    "get_knowledge": 1.0,
+    "search_semantic_context": 1.0,
+    "get_table_schema": 0.5,
+    "get_knowledge": 0.5,
     "get_all_column_meanings": 1.0,
     "get_column_meaning": 0.5,
     "get_all_external_knowledge_names": 0.5,
@@ -136,8 +137,45 @@ def build_tool_server(state: dict, mode: str):
         return await run_tool("get_schema", args, op)
 
     @tool(
+        "search_semantic_context",
+        "Search task-visible Knowledge definitions and table columns using semantic and exact-text retrieval. Cost: 1 bird-coin.",
+        {
+            "type": "object",
+            "properties": {
+                "queries": {
+                    "type": "array",
+                    "items": {"type": "string", "minLength": 1},
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "description": "One to eight non-empty search queries.",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "description": "Maximum results per resource group after multi-query merge.",
+                },
+                "resource_types": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["knowledge", "table_schema"]},
+                    "minItems": 1,
+                    "description": "Resource groups to search.",
+                },
+            },
+            "required": ["queries", "top_k", "resource_types"],
+            "additionalProperties": False,
+        },
+    )
+    async def search_semantic_context(args):
+        async def op():
+            payload = {"task_id": task_id, **args}
+            data = await call_service(settings.db_env_port, "/search/semantic_context", payload)
+            return json.dumps(data, ensure_ascii=False)
+        return await run_tool("search_semantic_context", args, op)
+
+    @tool(
         "get_table_schema",
-        "Get table columns, descriptions, constraints, direct joins, and optional shortest FK join paths from the kg-v1 graph. Cost: 1 bird-coin.",
+        "Get table columns, descriptions, constraints, direct joins, and optional shortest FK join paths from the semantic graph. Cost: 0.5 bird-coins.",
         {
             "type": "object",
             "properties": {
@@ -152,8 +190,8 @@ def build_tool_server(state: dict, mode: str):
                     },
                     "description": "Optional sections; defaults to all sections.",
                 },
-                "max_hops": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
-                "max_paths": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
+                "hops": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
+                "paths": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
             },
             "required": ["database_name", "from_table"],
             "additionalProperties": False,
@@ -166,7 +204,7 @@ def build_tool_server(state: dict, mode: str):
                 "database_name": args["database_name"],
                 "from_table": args["from_table"],
             }
-            for key in ("to_table", "include", "max_hops", "max_paths"):
+            for key in ("to_table", "include", "hops", "paths"):
                 if key in args and args[key] is not None:
                     payload[key] = args[key]
             data = await call_service(settings.db_env_port, "/table_schema", payload)
@@ -175,20 +213,20 @@ def build_tool_server(state: dict, mode: str):
 
     @tool(
         "get_knowledge",
-        "Get a Knowledge node and optionally expand its ordered REQUIRES dependencies from the kg-v1 graph. Cost: 1 bird-coin.",
+        "Get a Knowledge node and optionally expand its ordered DEPENDS_ON dependencies from the semantic graph. Cost: 0.5 bird-coins.",
         {
             "type": "object",
             "properties": {
-                "id": {
+                "knowledge_id": {
                     "type": "string",
                     "pattern": "^[a-z][a-z0-9_]*:[0-9]+$",
-                    "description": "Canonical global Knowledge ID, for example alien:10.",
+                    "description": "Canonical Knowledge ID, for example alien:10.",
                 },
                 "include": {
                     "type": "array",
                     "items": {
                         "type": "string",
-                        "enum": ["summary", "definition", "provenance"],
+                        "enum": ["description", "definition", "provenance", "related_columns"],
                     },
                     "description": "Optional node sections; omitted means identity fields only.",
                 },
@@ -196,19 +234,19 @@ def build_tool_server(state: dict, mode: str):
                     "type": "object",
                     "properties": {
                         "depth": {"type": "integer", "minimum": 0, "maximum": 5},
-                        "max_nodes": {"type": "integer", "minimum": 1, "maximum": 50},
+                        "nodes": {"type": "integer", "minimum": 1, "maximum": 50},
                     },
-                    "required": ["depth", "max_nodes"],
+                    "required": ["depth", "nodes"],
                     "additionalProperties": False,
                 },
             },
-            "required": ["id"],
+            "required": ["knowledge_id"],
             "additionalProperties": False,
         },
     )
     async def get_knowledge(args):
         async def op():
-            payload = {"task_id": task_id, "id": args["id"]}
+            payload = {"task_id": task_id, "knowledge_id": args["knowledge_id"]}
             for key in ("include", "expand"):
                 if key in args and args[key] is not None:
                     payload[key] = args[key]
@@ -326,7 +364,7 @@ def build_tool_server(state: dict, mode: str):
             return "\n".join(parts)
         return await run_tool("submit_sql", args, op)
 
-    all_tools = [execute_sql, get_schema, get_table_schema, get_knowledge, get_all_column_meanings, get_column_meaning,
+    all_tools = [execute_sql, get_schema, search_semantic_context, get_table_schema, get_knowledge, get_all_column_meanings, get_column_meaning,
                  get_all_external_knowledge_names, get_knowledge_definition,
                  get_all_knowledge_definitions, ask_user, submit_sql]
     by_name = {item.name: item for item in all_tools}

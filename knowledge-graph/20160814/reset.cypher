@@ -6,9 +6,15 @@
 MATCH (n)
 DETACH DELETE n;
 
+DROP CONSTRAINT kg_v1_database_id IF EXISTS;
+DROP CONSTRAINT kg_v1_table_id IF EXISTS;
+DROP CONSTRAINT kg_v1_column_id IF EXISTS;
+DROP CONSTRAINT kg_v1_foreign_key_id IF EXISTS;
+DROP CONSTRAINT kg_v1_knowledge_id IF EXISTS;
 DROP CONSTRAINT kg_v1_database_entity_key IF EXISTS;
 DROP CONSTRAINT kg_v1_table_entity_key IF EXISTS;
 DROP CONSTRAINT kg_v1_column_entity_key IF EXISTS;
 DROP CONSTRAINT kg_v1_foreign_key_entity_key IF EXISTS;
-DROP CONSTRAINT kg_v1_knowledge_id IF EXISTS;
 DROP INDEX kg_v1_table_lookup IF EXISTS;
+DROP INDEX semantic_search_text IF EXISTS;
+DROP INDEX semantic_search_embedding IF EXISTS;

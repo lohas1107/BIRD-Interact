@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from threading import Lock
 from typing import Any
 
+import httpx
 from neo4j import READ_ACCESS, GraphDatabase, exceptions as neo4j_exceptions
 
 from shared.config import settings
@@ -14,10 +15,10 @@ from shared.config import settings
 
 DEFAULT_INCLUDE = ("columns", "descriptions", "constraints", "direct_joins")
 ALLOWED_INCLUDE = frozenset(DEFAULT_INCLUDE)
-DEFAULT_MAX_HOPS = 5
-MAX_MAX_HOPS = 10
-DEFAULT_MAX_PATHS = 5
-MAX_MAX_PATHS = 20
+DEFAULT_HOPS = 5
+MAX_HOPS = 10
+DEFAULT_PATHS = 5
+MAX_PATHS = 20
 
 
 class GraphSchemaError(Exception):
@@ -28,6 +29,8 @@ class GraphSchemaError(Exception):
         "DATABASE_NOT_FOUND": 404,
         "TABLE_NOT_FOUND": 404,
         "SAME_TABLE_PATH": 409,
+        "EMBEDDING_UNAVAILABLE": 503,
+        "EMBEDDING_INVALID": 502,
         "NEO4J_UNAVAILABLE": 503,
         "GRAPH_QUERY_FAILED": 500,
     }
@@ -67,7 +70,7 @@ class Neo4jSchemaRepository:
 
     @staticmethod
     def _normalize(request: Any) -> dict[str, Any]:
-        database_name = str(getattr(request, "database_name", "")).strip()
+        database_name = str(getattr(request, "database_name", "")).strip().casefold()
         from_table = str(getattr(request, "from_table", "")).strip()
         to_table_raw = getattr(request, "to_table", None)
         to_table = str(to_table_raw).strip() if to_table_raw is not None else None
@@ -91,20 +94,20 @@ class Neo4jSchemaRepository:
         # sections in the response assembly.
         include = list(dict.fromkeys(include))
 
-        max_hops = getattr(request, "max_hops", DEFAULT_MAX_HOPS)
-        max_paths = getattr(request, "max_paths", DEFAULT_MAX_PATHS)
-        if isinstance(max_hops, bool) or not isinstance(max_hops, int) or not 1 <= max_hops <= MAX_MAX_HOPS:
-            raise GraphSchemaError("INVALID_REQUEST", "max_hops must be an integer from 1 through 10")
-        if isinstance(max_paths, bool) or not isinstance(max_paths, int) or not 1 <= max_paths <= MAX_MAX_PATHS:
-            raise GraphSchemaError("INVALID_REQUEST", "max_paths must be an integer from 1 through 20")
+        hops = getattr(request, "hops", DEFAULT_HOPS)
+        paths = getattr(request, "paths", DEFAULT_PATHS)
+        if isinstance(hops, bool) or not isinstance(hops, int) or not 1 <= hops <= MAX_HOPS:
+            raise GraphSchemaError("INVALID_REQUEST", "hops must be an integer from 1 through 10")
+        if isinstance(paths, bool) or not isinstance(paths, int) or not 1 <= paths <= MAX_PATHS:
+            raise GraphSchemaError("INVALID_REQUEST", "paths must be an integer from 1 through 20")
 
         return {
             "database_name": database_name,
             "from_table": from_table.casefold(),
             "to_table": to_table.casefold() if to_table is not None else None,
             "include": include,
-            "max_hops": max_hops,
-            "max_paths": max_paths,
+            "hops": hops,
+            "paths": paths,
         }
 
     def get_table_schema(self, request: Any) -> dict[str, Any]:
@@ -135,8 +138,8 @@ class Neo4jSchemaRepository:
         database_name = query["database_name"]
         database = tx.run(
             """
-            MATCH (d:Database {database_name: $database_name})
-            RETURN d.entity_key AS entity_key
+            MATCH (d:Database {id: $database_name})
+            RETURN d.id AS id
             LIMIT 1
             """,
             database_name=database_name,
@@ -151,7 +154,7 @@ class Neo4jSchemaRepository:
         to_table = None
         if query["to_table"] is not None:
             to_table = Neo4jSchemaRepository._resolve_table(tx, database_name, query["to_table"], "to_table")
-            if to_table["entity_key"] == from_table["entity_key"]:
+            if to_table["id"] == from_table["id"]:
                 raise GraphSchemaError(
                     "SAME_TABLE_PATH",
                     "to_table must be different from from_table when a join path is requested",
@@ -202,8 +205,8 @@ class Neo4jSchemaRepository:
                 tx,
                 from_table,
                 to_table,
-                query["max_hops"],
-                query["max_paths"],
+                query["hops"],
+                query["paths"],
             )
             response["join_paths"] = paths
             if not paths:
@@ -212,7 +215,7 @@ class Neo4jSchemaRepository:
                     "scope": "path",
                     "from_table": from_table["table_name"],
                     "to_table": to_table["table_name"],
-                    "message": "No declared foreign-key path was found within max_hops.",
+                    "message": "No declared foreign-key path was found within hops.",
                 })
         response["warnings"] = warnings
         return response
@@ -221,9 +224,9 @@ class Neo4jSchemaRepository:
     def _resolve_table(tx, database_name: str, table_name: str, role: str) -> dict[str, str]:
         record = tx.run(
             """
-            MATCH (d:Database {database_name: $database_name})-[:HAS_TABLE]->(t:Table)
+            MATCH (d:Database {id: $database_name})-[:HAS_TABLE]->(t:Table)
             WHERE t.table_name = $table_name
-            RETURN t.entity_key AS entity_key, t.table_name AS table_name
+            RETURN t.id AS id, t.table_name AS table_name
             LIMIT 1
             """,
             database_name=database_name,
@@ -234,7 +237,7 @@ class Neo4jSchemaRepository:
                 "TABLE_NOT_FOUND",
                 f"{role} {table_name!r} does not exist in database {database_name!r}",
             )
-        return {"entity_key": record["entity_key"], "table_name": record["table_name"]}
+        return {"id": record["id"], "table_name": record["table_name"]}
 
     @staticmethod
     def _table_payload(
@@ -248,19 +251,19 @@ class Neo4jSchemaRepository:
         include_direct_joins: bool,
     ) -> dict[str, Any]:
         table_record = tx.run(
-            "MATCH (t:Table {entity_key: $entity_key}) RETURN t {.*} AS table",
-            entity_key=table["entity_key"],
+            "MATCH (t:Table {id: $id}) RETURN t {.*} AS table",
+            id=table["id"],
         ).single()
         if table_record is None:
-            raise GraphSchemaError("GRAPH_QUERY_FAILED", f"resolved table {table['entity_key']!r} disappeared")
+            raise GraphSchemaError("GRAPH_QUERY_FAILED", f"resolved table {table['id']!r} disappeared")
         table_properties = dict(table_record["table"])
         column_records = list(tx.run(
             """
-            MATCH (t:Table {entity_key: $entity_key})-[:HAS_COLUMN]->(c:Column)
+            MATCH (t:Table {id: $id})-[:HAS_COLUMN]->(c:Column)
             RETURN c {.*} AS column
             ORDER BY c.ordinal
             """,
-            entity_key=table["entity_key"],
+            id=table["id"],
         ))
         columns = [dict(record["column"]) for record in column_records]
 
@@ -272,12 +275,12 @@ class Neo4jSchemaRepository:
         if include_constraints:
             foreign_key_records = list(tx.run(
                 """
-                MATCH (t:Table {entity_key: $entity_key})-[:HAS_FOREIGN_KEY]->(fk:ForeignKey)
+                MATCH (t:Table {id: $id})-[:HAS_FOREIGN_KEY]->(fk:ForeignKey)
                 OPTIONAL MATCH (fk)-[:REFERENCES_TABLE]->(target:Table)
                 RETURN fk {.*} AS foreign_key, target.table_name AS to_table
                 ORDER BY fk.fk_key
                 """,
-                entity_key=table["entity_key"],
+                id=table["id"],
             ))
             primary_key = [column["column_name"] for column in columns if column.get("is_primary_key")]
             nullable_columns = [column["column_name"] for column in columns if column.get("nullable")]
@@ -294,14 +297,14 @@ class Neo4jSchemaRepository:
         if include_direct_joins:
             join_records = list(tx.run(
                 """
-                MATCH (t:Table {entity_key: $entity_key})-[j:JOINS_TO]-(other:Table)
+                MATCH (t:Table {id: $id})-[j:JOINS_TO]-(other:Table)
                 RETURN properties(j) AS join,
                        other.table_name AS other_table,
-                       startNode(j).entity_key AS start_entity_key,
-                       endNode(j).entity_key AS end_entity_key
+                       startNode(j).id AS start_id,
+                       endNode(j).id AS end_id
                 ORDER BY j.fk_key
                 """,
-                entity_key=table["entity_key"],
+                id=table["id"],
             ))
             payload["direct_joins"] = [
                 Neo4jSchemaRepository._direct_join_payload(record, table)
@@ -314,7 +317,7 @@ class Neo4jSchemaRepository:
         payload = {
             "column_name": column["column_name"],
             "ordinal": column["ordinal"],
-            "data_type": column["data_type"],
+            "column_type": column["column_type"],
             "nullable": column["nullable"],
             "default_expression": column.get("default_expression"),
             "is_primary_key": column["is_primary_key"],
@@ -337,15 +340,17 @@ class Neo4jSchemaRepository:
             "to_columns": list(foreign_key.get("to_columns", [])),
             "cardinality": foreign_key["cardinality"],
             "nullable": foreign_key["nullable"],
-            "entity_key": foreign_key["entity_key"],
+            # The public contract retains this response key while the graph
+            # node itself uses canonical property ``id``.
+            "entity_key": foreign_key.get("id", foreign_key.get("entity_key")),
         }
 
     @staticmethod
     def _direct_join_payload(record, table: dict[str, str]) -> dict[str, Any]:
         join = dict(record["join"])
-        start_key = record["start_entity_key"]
-        end_key = record["end_entity_key"]
-        current_is_start = table["entity_key"] == start_key
+        start_key = record["start_id"]
+        end_key = record["end_id"]
+        current_is_start = table["id"] == start_key
         return {
             "target_table": record["other_table"],
             "from_table": start_key.split(":", 1)[1],
@@ -363,19 +368,19 @@ class Neo4jSchemaRepository:
         # Neo4j does not accept a parameter in a variable-length bound. The
         # bound is validated as an integer before it is interpolated here.
         query = f"""
-            MATCH (from:Table {{entity_key: $from_key}}), (to:Table {{entity_key: $to_key}})
+            MATCH (from:Table {{id: $from_key}}), (to:Table {{id: $to_key}})
             MATCH p=allShortestPaths((from)-[:JOINS_TO*..{max_hops}]-(to))
             RETURN [node IN nodes(p) | node.table_name] AS table_names,
-                   [node IN nodes(p) | node.entity_key] AS node_keys,
+                   [node IN nodes(p) | node.id] AS node_keys,
                    [edge IN relationships(p) | properties(edge)] AS joins,
-                   [edge IN relationships(p) | startNode(edge).entity_key] AS start_keys,
-                   [edge IN relationships(p) | endNode(edge).entity_key] AS end_keys
+                   [edge IN relationships(p) | startNode(edge).id] AS start_keys,
+                   [edge IN relationships(p) | endNode(edge).id] AS end_keys
             LIMIT $max_paths
         """
         records = list(tx.run(
             query,
-            from_key=from_table["entity_key"],
-            to_key=to_table["entity_key"],
+            from_key=from_table["id"],
+            to_key=to_table["id"],
             max_paths=max_paths,
         ))
         paths = []
@@ -404,7 +409,7 @@ class Neo4jSchemaRepository:
 
 
 KNOWLEDGE_ID_RE = re.compile(r"^(?P<database>[a-z][a-z0-9_]*):(?P<source_id>[0-9]+)$")
-KNOWLEDGE_INCLUDE = ("summary", "definition", "provenance")
+KNOWLEDGE_INCLUDE = ("description", "definition", "provenance", "related_columns")
 KNOWLEDGE_INCLUDE_SET = frozenset(KNOWLEDGE_INCLUDE)
 MAX_KNOWLEDGE_DEPTH = 5
 MAX_KNOWLEDGE_NODES = 50
@@ -422,7 +427,7 @@ class KnowledgeGraphError(GraphSchemaError):
 
 
 class Neo4jKnowledgeRepository:
-    """Read-only repository for the kg-v1 ``Knowledge`` dependency graph."""
+    """Read-only repository for the semantic ``Knowledge`` dependency graph."""
 
     def __init__(self, config=settings):
         self._config = config
@@ -452,12 +457,18 @@ class Neo4jKnowledgeRepository:
 
     @classmethod
     def _normalize(cls, request: Any) -> dict[str, Any]:
-        raw_id = cls._request_value(request, "id")
+        raw_id = cls._request_value(request, "knowledge_id")
         if not isinstance(raw_id, str):
-            raise KnowledgeGraphError("INVALID_REQUEST", "id must match <database>:<non-negative integer>")
+            raise KnowledgeGraphError(
+                "INVALID_REQUEST",
+                "knowledge_id must match <database>:<non-negative integer>",
+            )
         match = KNOWLEDGE_ID_RE.fullmatch(raw_id)
         if match is None:
-            raise KnowledgeGraphError("INVALID_REQUEST", "id must match <database>:<non-negative integer>")
+            raise KnowledgeGraphError(
+                "INVALID_REQUEST",
+                "knowledge_id must match <database>:<non-negative integer>",
+            )
 
         database_name = match.group("database")
         source_id = int(match.group("source_id"))
@@ -485,17 +496,17 @@ class Neo4jKnowledgeRepository:
             else:
                 expand_values = {
                     key: getattr(raw_expand, key)
-                    for key in ("depth", "max_nodes")
+                    for key in ("depth", "nodes")
                     if hasattr(raw_expand, key)
                 }
-            unknown_expand = sorted(set(expand_values) - {"depth", "max_nodes"})
-            if unknown_expand or "depth" not in expand_values or "max_nodes" not in expand_values:
+            unknown_expand = sorted(set(expand_values) - {"depth", "nodes"})
+            if unknown_expand or "depth" not in expand_values or "nodes" not in expand_values:
                 raise KnowledgeGraphError(
                     "INVALID_REQUEST",
-                    "expand must contain exactly depth and max_nodes",
+                    "expand must contain exactly depth and nodes",
                 )
             depth = expand_values["depth"]
-            max_nodes = expand_values["max_nodes"]
+            max_nodes = expand_values["nodes"]
             if isinstance(depth, bool) or not isinstance(depth, int) or not 0 <= depth <= MAX_KNOWLEDGE_DEPTH:
                 raise KnowledgeGraphError(
                     "INVALID_REQUEST",
@@ -504,7 +515,7 @@ class Neo4jKnowledgeRepository:
             if isinstance(max_nodes, bool) or not isinstance(max_nodes, int) or not 1 <= max_nodes <= MAX_KNOWLEDGE_NODES:
                 raise KnowledgeGraphError(
                     "INVALID_REQUEST",
-                    "expand.max_nodes must be an integer from 1 through 50",
+                    "expand.nodes must be an integer from 1 through 50",
                 )
             expand = {"depth": depth, "max_nodes": max_nodes}
 
@@ -533,8 +544,20 @@ class Neo4jKnowledgeRepository:
                     normalized.add(f"{match.group('database')}:{int(match.group('source_id'))}")
         return sorted(normalized)
 
-    def get_knowledge(self, request: Any, hidden_ids: Any = None) -> dict[str, Any]:
+    def get_knowledge(
+        self,
+        request: Any,
+        hidden_ids: Any = None,
+        task_database_name: str | None = None,
+    ) -> dict[str, Any]:
         query = self._normalize(request)
+        if task_database_name is not None:
+            selected_database = str(task_database_name).strip().casefold()
+            if query["database_name"] != selected_database:
+                raise KnowledgeGraphError(
+                    "KNOWLEDGE_NOT_FOUND",
+                    f"knowledge {query['root_id']!r} does not exist or is not visible",
+                )
         request_hidden_ids = self._request_value(request, "hidden_ids")
         if hidden_ids is None:
             hidden_ids = request_hidden_ids
@@ -573,13 +596,13 @@ class Neo4jKnowledgeRepository:
     @staticmethod
     def _node_payload(node: dict[str, Any], distance: int, include: set[str]) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "id": node.get("id"),
+            "knowledge_id": node.get("id"),
             "name": node.get("name"),
             "type": node.get("type"),
             "distance": distance,
         }
-        if "summary" in include:
-            payload["summary"] = node.get("summary")
+        if "description" in include:
+            payload["description"] = node.get("description")
         if "definition" in include:
             payload["definition"] = node.get("definition")
         if "provenance" in include:
@@ -588,15 +611,17 @@ class Neo4jKnowledgeRepository:
                 "source_line": node.get("source_line"),
                 "source_id": node.get("source_id"),
             }
+        if "related_columns" in include:
+            payload["related_columns"] = list(node.get("related_columns", []))
         return payload
 
     @staticmethod
     def _read_root(tx, query: dict[str, Any]) -> dict[str, Any]:
         record = tx.run(
             """
-            MATCH (d:Database {database_name: $database_name})-[:HAS_KNOWLEDGE]->(k:Knowledge)
+            MATCH (d:Database {id: $database_name})-[:HAS_KNOWLEDGE]->(k:Knowledge)
             WHERE k.id = $root_id AND NOT k.id IN $hidden_ids
-            RETURN k { .id, .name, .type, .summary, .definition,
+            RETURN k { .id, .name, .type, .description, .definition,
                        .source_file, .source_line, .source_id } AS node
             LIMIT 1
             """,
@@ -618,16 +643,16 @@ class Neo4jKnowledgeRepository:
         result = tx.run(
             """
             UNWIND range(0, size($parent_ids) - 1) AS parent_index
-            MATCH (d:Database {database_name: $database_name})-[:HAS_KNOWLEDGE]->(parent:Knowledge)
+            MATCH (d:Database {id: $database_name})-[:HAS_KNOWLEDGE]->(parent:Knowledge)
             WHERE parent.id = $parent_ids[parent_index]
               AND NOT parent.id IN $hidden_ids
             MATCH (d)-[:HAS_KNOWLEDGE]->(child:Knowledge)
-            MATCH (parent)-[r:REQUIRES]->(child)
+            MATCH (parent)-[r:DEPENDS_ON]->(child)
             WHERE child.id STARTS WITH $database_prefix
               AND NOT child.id IN $hidden_ids
             RETURN parent.id AS parent_id,
                    r.position AS position,
-                   child { .id, .name, .type, .summary, .definition,
+                   child { .id, .name, .type, .description, .definition,
                            .source_file, .source_line, .source_id } AS node
             ORDER BY position, parent_index, child.id
             """,
@@ -637,6 +662,37 @@ class Neo4jKnowledgeRepository:
             hidden_ids=query["hidden_ids"],
         )
         return list(result)
+
+    @staticmethod
+    def _read_related_columns(
+        tx,
+        knowledge_ids: list[str],
+        database_name: str | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        if not knowledge_ids:
+            return {}
+        records = tx.run(
+            """
+            UNWIND $knowledge_ids AS knowledge_id
+            MATCH (k:Knowledge {id: knowledge_id})-[:REFERS_TO_COLUMN]->(c:Column)
+            WHERE $database_prefix IS NULL OR c.id STARTS WITH $database_prefix
+            RETURN k.id AS knowledge_id,
+                   c.id AS column_id,
+                   c.table_name AS table_name,
+                   c.column_name AS column_name
+            ORDER BY knowledge_id, table_name, column_name, column_id
+            """,
+            knowledge_ids=knowledge_ids,
+            database_prefix=(str(database_name).strip().casefold() + ":") if database_name else None,
+        )
+        related: dict[str, list[dict[str, Any]]] = {}
+        for record in records:
+            related.setdefault(record["knowledge_id"], []).append({
+                "column_id": record["column_id"],
+                "table_name": record["table_name"],
+                "column_name": record["column_name"],
+            })
+        return related
 
     @staticmethod
     def _read_knowledge(tx, query: dict[str, Any]) -> dict[str, Any]:
@@ -673,9 +729,9 @@ class Neo4jKnowledgeRepository:
                     parent_id = record["parent_id"]
                     position = record["position"]
                     edges.append({
-                        "from": parent_id,
-                        "to": child_id,
-                        "type": "REQUIRES",
+                        "from_knowledge_id": parent_id,
+                        "to_knowledge_id": child_id,
+                        "type": "DEPENDS_ON",
                         "position": position,
                     })
                     if child_id in nodes:
@@ -692,14 +748,373 @@ class Neo4jKnowledgeRepository:
         visible_ids = set(nodes)
         response_edges = [
             edge for edge in edges
-            if edge["from"] in visible_ids and edge["to"] in visible_ids
+            if edge["from_knowledge_id"] in visible_ids and edge["to_knowledge_id"] in visible_ids
         ]
+        if "related_columns" in include:
+            related = Neo4jKnowledgeRepository._read_related_columns(tx, ordered_ids, query["database_name"])
+            for node_id in ordered_ids:
+                nodes[node_id]["related_columns"] = related.get(node_id, [])
         return {
-            "root_id": root_id,
+            "knowledge_id": root_id,
             "nodes": [
                 Neo4jKnowledgeRepository._node_payload(nodes[node_id], distances[node_id], include)
                 for node_id in ordered_ids
             ],
             "edges": response_edges,
             "truncated": truncated,
+            "warnings": [],
         }
+
+
+SEARCH_RESOURCE_TYPES = ("knowledge", "table_schema")
+SEARCH_RESOURCE_SET = frozenset(SEARCH_RESOURCE_TYPES)
+SEARCH_INDEX_CANDIDATES = 100
+SEARCH_EMBEDDING_DIMENSIONS = 1024
+QWEN_QUERY_INSTRUCTION = (
+    "<Instruct>: Retrieve relevant knowledge definitions or table columns for "
+    "resolving an ambiguous SQL request.\n"
+    "<Query>: {query}"
+)
+
+
+class SemanticSearchRepository:
+    """Vector/full-text semantic search over task-visible graph resources."""
+
+    def __init__(self, config=settings):
+        self._config = config
+        self._driver = None
+        self._driver_lock = Lock()
+
+    def _get_driver(self):
+        if self._driver is None:
+            with self._driver_lock:
+                if self._driver is None:
+                    self._driver = GraphDatabase.driver(
+                        self._config.neo4j_uri,
+                        auth=(self._config.neo4j_user, self._config.neo4j_password),
+                    )
+        return self._driver
+
+    def close(self) -> None:
+        if self._driver is not None:
+            self._driver.close()
+            self._driver = None
+
+    @staticmethod
+    def _request_value(request: Any, key: str, default: Any = None) -> Any:
+        if isinstance(request, Mapping):
+            return request.get(key, default)
+        return getattr(request, key, default)
+
+    @classmethod
+    def _normalize(cls, request: Any) -> dict[str, Any]:
+        raw_queries = cls._request_value(request, "queries")
+        if (
+            not isinstance(raw_queries, list)
+            or not 1 <= len(raw_queries) <= 8
+            or any(not isinstance(query, str) or not query.strip() for query in raw_queries)
+        ):
+            raise GraphSchemaError("INVALID_REQUEST", "queries must contain 1 through 8 non-empty strings")
+        queries = [query.strip() for query in raw_queries]
+
+        top_k = cls._request_value(request, "top_k")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 20:
+            raise GraphSchemaError("INVALID_REQUEST", "top_k must be an integer from 1 through 20")
+
+        raw_resource_types = cls._request_value(request, "resource_types")
+        if (
+            not isinstance(raw_resource_types, list)
+            or not raw_resource_types
+            or any(not isinstance(value, str) for value in raw_resource_types)
+        ):
+            raise GraphSchemaError("INVALID_REQUEST", "resource_types must contain at least one string")
+        unknown = sorted(set(raw_resource_types) - SEARCH_RESOURCE_SET)
+        if unknown:
+            raise GraphSchemaError(
+                "INVALID_REQUEST",
+                f"resource_types contains unsupported values: {', '.join(unknown)}",
+            )
+        resource_types = list(dict.fromkeys(raw_resource_types))
+        return {"queries": queries, "top_k": top_k, "resource_types": resource_types}
+
+    def search(
+        self,
+        request: Any,
+        database_name: str,
+        hidden_ids: Any = None,
+    ) -> dict[str, Any]:
+        query = self._normalize(request)
+        database_name = str(database_name).strip().casefold()
+        if not database_name:
+            raise GraphSchemaError("INVALID_REQUEST", "task selected database is required")
+        hidden = Neo4jKnowledgeRepository._normalize_hidden_ids(database_name, hidden_ids)
+        try:
+            embeddings = self._embed_queries(query["queries"])
+            driver = self._get_driver()
+            with driver.session(
+                database=self._config.neo4j_database,
+                default_access_mode=READ_ACCESS,
+            ) as session:
+                return session.execute_read(
+                    self._read_search,
+                    {
+                        **query,
+                        "database_name": database_name,
+                        "hidden_ids": hidden,
+                        "embeddings": embeddings,
+                    },
+                )
+        except GraphSchemaError:
+            raise
+        except (
+            neo4j_exceptions.ServiceUnavailable,
+            neo4j_exceptions.SessionExpired,
+            neo4j_exceptions.AuthError,
+            neo4j_exceptions.DatabaseNotFound,
+        ) as exc:
+            raise GraphSchemaError("NEO4J_UNAVAILABLE", str(exc) or "Neo4j is unavailable") from exc
+        except neo4j_exceptions.Neo4jError as exc:
+            raise GraphSchemaError("GRAPH_QUERY_FAILED", str(exc) or "Neo4j query failed") from exc
+        except OSError as exc:
+            raise GraphSchemaError("NEO4J_UNAVAILABLE", str(exc) or "Neo4j is unavailable") from exc
+
+    def _embed_queries(self, queries: list[str]) -> list[list[float]]:
+        payload = {
+            "texts": [QWEN_QUERY_INSTRUCTION.format(query=query) for query in queries],
+        }
+        try:
+            with httpx.Client(
+                timeout=self._config.embedding_timeout,
+                trust_env=False,
+            ) as client:
+                response = client.post(
+                    f"{self._config.embedding_service_url.rstrip('/')}/embed",
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+        except (httpx.HTTPError, ValueError, OSError) as exc:
+            raise GraphSchemaError("EMBEDDING_UNAVAILABLE", str(exc) or "embedding service unavailable") from exc
+
+        embeddings = data.get("embeddings") if isinstance(data, dict) else None
+        if (
+            not isinstance(embeddings, list)
+            or len(embeddings) != len(queries)
+            or any(
+                not isinstance(vector, list)
+                or len(vector) != SEARCH_EMBEDDING_DIMENSIONS
+                or any(not isinstance(value, (int, float)) for value in vector)
+                for vector in embeddings
+            )
+        ):
+            raise GraphSchemaError(
+                "EMBEDDING_INVALID",
+                f"embedding service must return {len(queries)} vectors of dimension {SEARCH_EMBEDDING_DIMENSIONS}",
+            )
+        return [[float(value) for value in vector] for vector in embeddings]
+
+    @staticmethod
+    def _safe_vector_score(score: Any) -> float:
+        try:
+            value = float(score)
+        except (TypeError, ValueError):
+            return 0.0
+        # Neo4j cosine scores are normally already in [0, 1]; clamp the
+        # contract boundary so backend version differences cannot leak scores.
+        return max(0.0, min(1.0, value))
+
+    @staticmethod
+    def _normalize_fulltext_scores(scores: dict[str, float]) -> dict[str, float]:
+        if not scores:
+            return {}
+        values = list(scores.values())
+        minimum = min(values)
+        maximum = max(values)
+        if maximum == minimum:
+            return {key: 1.0 for key in scores}
+        return {
+            key: max(0.0, min(1.0, (value - minimum) / (maximum - minimum)))
+            for key, value in scores.items()
+        }
+
+    @staticmethod
+    def _fulltext_query(query: str) -> str:
+        # Keep exact names, abbreviations and formula identifiers while
+        # avoiding Lucene punctuation interpreted as query syntax.
+        tokens = re.findall(r"[A-Za-z0-9_]+", query)
+        return " ".join(tokens) or query
+
+    @staticmethod
+    def _node_from_record(record: Any) -> dict[str, Any]:
+        raw = record["node"]
+        return dict(raw) if isinstance(raw, Mapping) else dict(raw)
+
+    @staticmethod
+    def _resource_label(resource_type: str) -> str:
+        return "Knowledge" if resource_type == "knowledge" else "Column"
+
+    @staticmethod
+    def _read_database(tx, database_name: str) -> None:
+        if tx.run("MATCH (d:Database {id: $database_name}) RETURN d.id LIMIT 1", database_name=database_name).single() is None:
+            raise GraphSchemaError(
+                "DATABASE_NOT_FOUND",
+                f"database {database_name!r} does not exist in the semantic graph",
+            )
+
+    @classmethod
+    def _read_candidates(
+        cls,
+        tx,
+        query: dict[str, Any],
+        resource_type: str,
+        embedding: list[float],
+        text_query: str,
+    ) -> dict[str, dict[str, Any]]:
+        label = cls._resource_label(resource_type)
+        prefix = query["database_name"] + ":"
+        vector_records = tx.run(
+            """
+            CALL db.index.vector.queryNodes($index_name, $candidate_limit, $embedding)
+            YIELD node, score
+            WHERE $label IN labels(node)
+              AND node.id STARTS WITH $database_prefix
+              AND NOT node.id IN $hidden_ids
+            RETURN node {.*} AS node, score
+            """,
+            index_name="semantic_search_embedding",
+            candidate_limit=SEARCH_INDEX_CANDIDATES,
+            embedding=embedding,
+            label=label,
+            database_prefix=prefix,
+            hidden_ids=query["hidden_ids"] if resource_type == "knowledge" else [],
+        )
+        vector_hits = {}
+        for record in vector_records:
+            node = cls._node_from_record(record)
+            vector_hits[node["id"]] = {"node": node, "score": cls._safe_vector_score(record["score"])}
+
+        fulltext_records = tx.run(
+            """
+            CALL db.index.fulltext.queryNodes($index_name, $text_query)
+            YIELD node, score
+            WHERE $label IN labels(node)
+              AND node.id STARTS WITH $database_prefix
+              AND NOT node.id IN $hidden_ids
+            RETURN node {.*} AS node, score
+            """,
+            index_name="semantic_search_text",
+            text_query=text_query,
+            label=label,
+            database_prefix=prefix,
+            hidden_ids=query["hidden_ids"] if resource_type == "knowledge" else [],
+        )
+        raw_fulltext = {}
+        fulltext_nodes = {}
+        for record in fulltext_records:
+            node = cls._node_from_record(record)
+            key = node["id"]
+            raw_fulltext[key] = float(record["score"])
+            fulltext_nodes[key] = node
+        fulltext_hits = cls._normalize_fulltext_scores(raw_fulltext)
+
+        candidates: dict[str, dict[str, Any]] = {}
+        for node_id in set(vector_hits) | set(fulltext_hits):
+            vector_hit = vector_hits.get(node_id)
+            node = vector_hit["node"] if vector_hit else fulltext_nodes[node_id]
+            candidates[node_id] = {
+                "node": node,
+                "score": max(
+                    vector_hit["score"] if vector_hit else 0.0,
+                    fulltext_hits.get(node_id, 0.0),
+                ),
+            }
+        return candidates
+
+    @staticmethod
+    def _related_columns(
+        tx,
+        knowledge_ids: list[str],
+        database_name: str | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        if not knowledge_ids:
+            return {}
+        records = tx.run(
+            """
+            UNWIND $knowledge_ids AS knowledge_id
+            MATCH (k:Knowledge {id: knowledge_id})-[:REFERS_TO_COLUMN]->(c:Column)
+            WHERE $database_prefix IS NULL OR c.id STARTS WITH $database_prefix
+            RETURN k.id AS knowledge_id, c.id AS column_id,
+                   c.table_name AS table_name, c.column_name AS column_name
+            ORDER BY knowledge_id, table_name, column_name, column_id
+            """,
+            knowledge_ids=knowledge_ids,
+            database_prefix=(str(database_name).strip().casefold() + ":") if database_name else None,
+        )
+        result: dict[str, list[dict[str, Any]]] = {}
+        for record in records:
+            result.setdefault(record["knowledge_id"], []).append({
+                "column_id": record["column_id"],
+                "table_name": record["table_name"],
+                "column_name": record["column_name"],
+            })
+        return result
+
+    @classmethod
+    def _read_search(cls, tx, query: dict[str, Any]) -> dict[str, Any]:
+        cls._read_database(tx, query["database_name"])
+        merged: dict[str, dict[str, dict[str, Any]]] = {
+            resource_type: {} for resource_type in query["resource_types"]
+        }
+        for embedding, raw_query in zip(query["embeddings"], query["queries"]):
+            fulltext_query = cls._fulltext_query(raw_query)
+            for resource_type in query["resource_types"]:
+                candidates = cls._read_candidates(
+                    tx,
+                    query,
+                    resource_type,
+                    embedding,
+                    fulltext_query,
+                )
+                target = merged[resource_type]
+                for node_id, candidate in candidates.items():
+                    current = target.get(node_id)
+                    if current is None or candidate["score"] > current["score"]:
+                        target[node_id] = candidate
+
+        related = cls._related_columns(
+            tx,
+            list(merged.get("knowledge", {}).keys()),
+            query["database_name"],
+        )
+        response: dict[str, Any] = {"knowledge": [], "table_schema": []}
+        for resource_type in query["resource_types"]:
+            hits = sorted(
+                merged[resource_type].values(),
+                key=lambda hit: (-hit["score"], str(hit["node"].get("id"))),
+            )[: query["top_k"]]
+            if resource_type == "knowledge":
+                response["knowledge"] = [
+                    {
+                        "knowledge_id": hit["node"]["id"],
+                        "database_name": query["database_name"],
+                        "name": hit["node"].get("name"),
+                        "type": hit["node"].get("type"),
+                        "score": hit["score"],
+                        "related_columns": related.get(hit["node"]["id"], []),
+                    }
+                    for hit in hits
+                ]
+            else:
+                response["table_schema"] = [
+                    {
+                        "table_id": f"{query['database_name']}:{hit['node'].get('table_name')}",
+                        "table_name": hit["node"].get("table_name"),
+                        "column_id": hit["node"]["id"],
+                        "column_name": hit["node"].get("column_name"),
+                        "column_type": hit["node"].get("column_type"),
+                        "description": hit["node"].get("description"),
+                        "score": hit["score"],
+                    }
+                    for hit in hits
+                ]
+        return response

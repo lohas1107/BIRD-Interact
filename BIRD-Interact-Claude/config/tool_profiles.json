@@ -1,13 +1,13 @@
 {
   "a-interact-default": [
-    "execute_sql",
+    "ask_user",
     "get_schema",
     "get_all_column_meanings",
     "get_column_meaning",
     "get_all_external_knowledge_names",
     "get_knowledge_definition",
     "get_all_knowledge_definitions",
-    "ask_user",
+    "execute_sql",
     "submit_sql"
   ],
   "c-interact-default": [
@@ -15,9 +15,10 @@
     "submit_sql"
   ],
   "kg-v1": [
+    "ask_user",
+    "search_semantic_context",
     "get_knowledge",
     "get_table_schema",
-    "ask_user",
     "execute_sql",
     "submit_sql"
   ]

@@ -11,6 +11,9 @@ orchestrator/runner.py
   ├─ system_agent :6000   ClaudeSDKClient + task-scoped MCP tools
   ├─ user_simulator :6001 Claude Agent SDK, no tools
   └─ db_environment :6002 PostgreSQL execution and evaluation
+
+kg-v1 additionally uses the optional Neo4j :7687 and Qwen embedding :6003
+services from the `kg` Docker Compose profile.
 ```
 
 The system agent exposes only the benchmark MCP tools. Claude Code's file,
@@ -163,6 +166,7 @@ Available names are:
 ```text
 execute_sql
 get_schema
+search_semantic_context
 get_table_schema
 get_knowledge
 get_all_column_meanings
@@ -191,6 +195,12 @@ JSON, and invalid value types fail before evaluation tasks start. Tool order is
 preserved in the MCP server and SDK allowlist. c-interact always preloads its
 complete schema and external knowledge regardless of its selected tools.
 Resolved profile metadata is stored once at the top level of a/c result JSON.
+
+The `kg-v1` profile uses the semantic graph contract documented in
+`knowledge-graph/20160814/README.md`: semantic search is task-scoped, Knowledge
+expansion uses `knowledge_id`/`DEPENDS_ON`, and table schema requests use
+`hops`/`paths`. The optional Qwen embedding service is started with the `kg`
+Docker Compose profile on port 6003.
 
 Oracle bypasses the agent and MCP server. It does not load this configuration,
 and rejects both profile flags if either is explicitly supplied.

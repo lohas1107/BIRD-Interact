@@ -44,8 +44,8 @@ class TableSchemaRequest(BaseModel):
     from_table: str
     to_table: Optional[str] = None
     include: Optional[List[str]] = None
-    max_hops: Optional[int] = 5
-    max_paths: Optional[int] = 5
+    hops: Any = 5
+    paths: Any = 5
 
 
 class KnowledgeGraphExpandRequest(BaseModel):
@@ -53,14 +53,23 @@ class KnowledgeGraphExpandRequest(BaseModel):
     # stable INVALID_REQUEST error contract instead of FastAPI's 422 shape.
     model_config = ConfigDict(extra="allow")
     depth: Any = None
-    max_nodes: Any = None
+    nodes: Any = None
 
 
 class KnowledgeGraphRequest(BaseModel):
     task_id: str
-    id: Any = None
+    knowledge_id: Any = None
     include: Any = None
     expand: Any = None
+
+
+class SearchSemanticContextRequest(BaseModel):
+    # Validation stays in the repository so callers receive stable graph/tool
+    # error codes instead of FastAPI's default 422 shape.
+    task_id: str
+    queries: Any = None
+    top_k: Any = None
+    resource_types: Any = None
 
 
 class ColumnMeaningRequest(BaseModel):
