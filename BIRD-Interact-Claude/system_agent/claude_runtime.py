@@ -54,6 +54,12 @@ class ClaudeRuntime:
             session_state.setdefault("task_done", False)
             session_state.setdefault("phase_transition_done", False)
             session_state.setdefault("phase_transition_failed", False)
+            session_state.setdefault("budget_exhausted", False)
+            session_state.setdefault("budget_overdrawn", False)
+            session_state.setdefault("phase2_skipped_due_budget", False)
+            session_state.setdefault("terminal_reason", None)
+            session_state.setdefault("next_action", "resolve_and_submit")
+            session_state.setdefault("retryable", False)
             server, allowed_tools = build_tool_server(session_state, mode)
             options = ClaudeAgentOptions(
                 model=settings.system_agent_model,

@@ -89,8 +89,50 @@ class EvaluationControlTests(unittest.TestCase):
         self.assertEqual(len(submit_calls), 1)
         self.assertEqual(state["budget_remaining"], -1.0)
         self.assertTrue(state["task_done"])
+        self.assertTrue(state["budget_exhausted"])
+        self.assertEqual(state["terminal_reason"], "budget_exhausted_after_submit")
+        self.assertFalse(state["retryable"])
         self.assertIn("Your SQL is not correct", first.root.content[0].text)
         self.assertIn("already complete", second.root.content[0].text)
+
+    def test_budget_overdrawn_submit_is_allowed_once_but_terminal(self):
+        state = {
+            "task_id": "budget-overdrawn-task",
+            "budget_remaining": 2.0,
+            "initial_budget": 2.0,
+        }
+        with patch("system_agent.tools.httpx.AsyncClient", _FakeAsyncClient):
+            server, _ = build_tool_server(state, "a-interact")
+            first = _call_handler(server, "submit_sql", {"sql": "SELECT 1"})
+            second = _call_handler(server, "submit_sql", {"sql": "SELECT 2"})
+
+        submit_calls = [url for url, _ in _FakeAsyncClient.calls if url.endswith("/submit")]
+        self.assertEqual(len(submit_calls), 1)
+        self.assertEqual(state["budget_remaining"], -1.0)
+        self.assertTrue(state["budget_overdrawn"])
+        self.assertTrue(state["task_done"])
+        self.assertEqual(state["terminal_reason"], "budget_exhausted_after_submit")
+        self.assertFalse(state["retryable"])
+        self.assertIn("one allowed final submit", first.root.content[0].text)
+        self.assertIn("already complete", second.root.content[0].text)
+
+    def test_overdrawn_submit_service_error_is_terminal_without_retry(self):
+        _FakeAsyncClient.failures["/submit"] = RuntimeError("submit unavailable")
+        state = {
+            "task_id": "budget-overdrawn-error",
+            "budget_remaining": 2.0,
+            "initial_budget": 2.0,
+        }
+        with patch("system_agent.tools.httpx.AsyncClient", _FakeAsyncClient):
+            server, _ = build_tool_server(state, "a-interact")
+            response = _call_handler(server, "submit_sql", {"sql": "SELECT 1"})
+
+        submit_calls = [url for url, _ in _FakeAsyncClient.calls if url.endswith("/submit")]
+        self.assertEqual(len(submit_calls), 1)
+        self.assertTrue(state["task_done"])
+        self.assertEqual(state["last_submit_status"], "error")
+        self.assertFalse(state["retryable"])
+        self.assertIn("Tool error", response.root.content[0].text)
 
     def test_budget_exhaustion_skips_follow_up_transition(self):
         _FakeAsyncClient.responses["/submit"] = {
@@ -108,7 +150,7 @@ class EvaluationControlTests(unittest.TestCase):
         }
         with patch("system_agent.tools.httpx.AsyncClient", _FakeAsyncClient):
             server, _ = build_tool_server(state, "a-interact")
-            _call_handler(server, "submit_sql", {"sql": "SELECT 1"})
+            response = _call_handler(server, "submit_sql", {"sql": "SELECT 1"})
 
         transition_calls = [
             url for url, _ in _FakeAsyncClient.calls
@@ -116,7 +158,32 @@ class EvaluationControlTests(unittest.TestCase):
         ]
         self.assertEqual(transition_calls, [])
         self.assertTrue(state["task_done"])
+        self.assertTrue(state["budget_exhausted"])
+        self.assertFalse(state["budget_overdrawn"])
+        self.assertTrue(state["phase2_skipped_due_budget"])
         self.assertFalse(state.get("phase_transition_done", False))
+        self.assertNotIn("Follow-up question:", response.root.content[0].text)
+        self.assertIn("Phase 2 skipped", response.root.content[0].text)
+
+    def test_failed_submit_with_budget_is_retryable(self):
+        state = {
+            "task_id": "retryable-submit",
+            "budget_remaining": 10.0,
+            "initial_budget": 10.0,
+        }
+        with patch("system_agent.tools.httpx.AsyncClient", _FakeAsyncClient):
+            server, _ = build_tool_server(state, "a-interact")
+            first = _call_handler(server, "submit_sql", {"sql": "SELECT 1"})
+            second = _call_handler(server, "submit_sql", {"sql": "SELECT 2"})
+
+        submit_calls = [url for url, _ in _FakeAsyncClient.calls if url.endswith("/submit")]
+        self.assertEqual(len(submit_calls), 2)
+        self.assertFalse(state.get("task_done", False))
+        self.assertEqual(state["next_action"], "retry_submit")
+        self.assertTrue(state["retryable"])
+        self.assertEqual(state["last_submit_status"], "failed")
+        self.assertIn("retryable", first.root.content[0].text)
+        self.assertIn("retryable", second.root.content[0].text)
 
     def test_successful_phase_one_transitions_once(self):
         _FakeAsyncClient.responses["/submit"] = {
@@ -142,6 +209,8 @@ class EvaluationControlTests(unittest.TestCase):
         ]
         self.assertEqual(len(transition_calls), 1)
         self.assertTrue(state["phase_transition_done"])
+        self.assertEqual(state["next_action"], "phase2")
+        self.assertFalse(state.get("task_done", False))
         self.assertFalse(state.get("phase_transition_failed", False))
 
     def test_phase_transition_failure_terminates_follow_up(self):
@@ -183,6 +252,22 @@ class EvaluationControlTests(unittest.TestCase):
         self.assertEqual(len(ask_calls), 1)
         self.assertIn("0/1", second.root.content[0].text)
 
+    def test_a_interact_ask_user_returns_synchronous_answer(self):
+        state = {
+            "task_id": "sync-clarification",
+            "budget_remaining": 5.0,
+            "initial_budget": 5.0,
+        }
+        with patch("system_agent.tools.httpx.AsyncClient", _FakeAsyncClient):
+            server, _ = build_tool_server(state, "a-interact")
+            response = _call_handler(server, "ask_user", {"question": "Question"})
+
+        ask_calls = [url for url, _ in _FakeAsyncClient.calls if url.endswith("/ask")]
+        self.assertEqual(len(ask_calls), 1)
+        self.assertIn("The user answer.", response.root.content[0].text)
+        self.assertIn("returned synchronously", response.root.content[0].text)
+        self.assertEqual(state["dialogue_history"][-1]["content"], "The user answer.")
+
     def test_claude_llm_wrapper_has_no_fake_max_tokens_argument(self):
         self.assertNotIn("max_tokens", inspect.signature(llm._call).parameters)
         self.assertNotIn("max_tokens", inspect.signature(llm.call_llm).parameters)
@@ -191,8 +276,18 @@ class EvaluationControlTests(unittest.TestCase):
         a_prompt = instruction_for("a-interact", {})
         c_prompt = instruction_for("c-interact", {"max_turn": 4})
         self.assertIn("submit_sql: 3 bird-coins", a_prompt)
-        self.assertIn("do not call any more", a_prompt)
+        self.assertIn("reserve the cost", a_prompt)
+        self.assertIn("every natural-language metric", a_prompt)
+        self.assertIn("explicit Knowledge ID", a_prompt)
+        self.assertIn("successful execution is not semantic validation", a_prompt)
+        self.assertIn("An expiring budget is never permission to guess", a_prompt)
+        self.assertIn("one final overdraw", a_prompt)
+        self.assertIn("output columns and aliases", a_prompt)
+        self.assertIn("answer is synchronous", a_prompt)
+        self.assertIn("next_action=phase2", a_prompt)
+        self.assertNotIn("submit your best SQL", a_prompt)
         self.assertIn("at most 4 clarification turns", c_prompt)
+        self.assertIn("synchronously", c_prompt)
         self.assertIn("at most once", c_prompt)
 
 

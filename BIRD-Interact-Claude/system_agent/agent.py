@@ -11,12 +11,34 @@ def _tools(state: dict, mode: str | None = None) -> tuple[str, ...]:
     return tuple(profile.get("tools", ()))
 
 
+def _semantic_grounding_contract() -> tuple[str, ...]:
+    """Rules that prevent plausible but semantically ungrounded SQL."""
+
+    return (
+        "- Treat the task's Knowledge source as authoritative. With a graph profile, record the canonical Knowledge ID; with a legacy profile, record the exact definition name returned by the knowledge tool.",
+        "- Before drafting or submitting SQL, establish a semantic contract for the task.",
+        "- Map every natural-language metric, classification label, event condition, and usability criterion to an explicit Knowledge ID or exact Knowledge definition.",
+        "- Obtain every derived-metric formula, threshold, category mapping, and usable/event condition from that definition; follow DEPENDS_ON nodes with get_knowledge when a definition refers to another metric.",
+        "- For named metrics and acronyms, search the exact term first. A semantically similar result, raw column, or plausible abbreviation is not a substitute.",
+        "- Treat search output as candidate discovery only. Keep Knowledge results separate from table-schema results, confirm the exact definition, and then resolve its required columns and joins.",
+        "- Do not invent formulas, thresholds, phase weights, category mappings, NULL rules, or join semantics. Do not replace a defined metric with one of its components.",
+        "- Keep an internal mapping of phrase -> Knowledge ID/definition -> formula/threshold -> required columns/joins before drafting SQL. Do not call submit_sql while any required mapping is unresolved.",
+        "- If a required definition or mapping cannot be found, ask one focused question with ask_user. The answer is returned synchronously in that tool call; incorporate it and continue. If ask_user is unavailable, do not submit a guessed query.",
+        "- execute_sql is only a runtime check for SQL parsing/execution and returned rows; it is not semantic validation. Re-check every expression, filter, join, grouping, and output metric against the resolved Knowledge definitions before submit_sql.",
+        "- Before submit_sql, verify the requested output columns and aliases, row grain, counted entity, join cardinality, filters, grouping, ordering direction, and LIMIT. The final SELECT must contain requested outputs, not diagnostic/helper columns.",
+        "- Budget policy: reserve the cost of submit_sql and, when a follow-up exists, the next phase's submit. Non-submit tools are rejected when funds are insufficient. submit_sql is the only tool allowed one final overdraw; after that call the session is terminal, with no retry and no Phase 2, regardless of evaluation correctness.",
+    )
+
+
 def instruction_for(mode: str, state: dict) -> str:
     tools = _tools(state, mode)
     if mode == "a-interact":
         lines = [
             "You are a PostgreSQL agent solving a BIRD-Interact task.",
             "Use only the provided BIRD tools. Never inspect local files or use shell commands.",
+            "",
+            "Mandatory semantic grounding rules:",
+            *_semantic_grounding_contract(),
         ]
         if tools:
             lines.extend(["", "Available tool costs:"])
@@ -43,14 +65,14 @@ def instruction_for(mode: str, state: dict) -> str:
         if knowledge_tools:
             lines.append("Use the available semantic and knowledge tools when definitions are needed.")
         if "execute_sql" in tools:
-            lines.append("Test candidate SQL with execute_sql when useful.")
+            lines.append("After semantic grounding, use execute_sql only as an optional runtime check; successful execution is not semantic validation.")
         if "ask_user" in tools:
-            lines.append("Clarify genuine ambiguities with ask_user, one question at a time.")
+            lines.append("Use ask_user for any unresolved metric, definition, formula, threshold, or mapping. Ask one focused question; its answer is synchronous, so incorporate it and continue.")
         if "submit_sql" in tools:
             lines.extend([
-                "Finish by calling submit_sql and stay within the task budget.",
-                "When the budget is exhausted, submit your best SQL once if necessary and do not call any more tools.",
-                "After a successful Phase 1 submission with a follow-up, continue with the returned follow-up and submit Phase 2.",
+                "Finish by calling submit_sql only after the semantic contract is complete; manage the budget so submission is the final required action.",
+                "An expiring budget is never permission to guess. If submit_sql reports a terminal budget state, stop and do not call another tool.",
+                "After a successful Phase 1 submission with a follow-up, continue with the returned follow-up only when the submit response says next_action=phase2; otherwise stop.",
             ])
         return "\n".join(lines)
 
@@ -69,15 +91,15 @@ def instruction_for(mode: str, state: dict) -> str:
     ]
     if "ask_user" in tools:
         lines.extend([
-            "Ask one clarification question at a time with ask_user.",
+            "Ask one focused clarification question at a time with ask_user; its answer is returned synchronously and should be used before continuing.",
             f'You have at most {state.get("max_turn", 0)} clarification turns.',
         ])
     if "execute_sql" in tools:
-        lines.append("Use execute_sql to test candidate queries when useful.")
+        lines.append("Use execute_sql only as an optional runtime check; successful execution is not semantic validation.")
     if "submit_sql" in tools:
         lines.extend([
-            "Call submit_sql with the final query, at most once during each session turn.",
-            "After submit_sql returns, stop and wait for the next user message.",
+            "Call submit_sql for the current phase only after the supplied schema and Knowledge support every requested metric and condition.",
+            "Call submit_sql at most once during each session turn; after it returns, stop and wait for the orchestrator's next message.",
             "Never use prose as a substitute for calling submit_sql.",
         ])
     return "\n".join(lines)
@@ -88,6 +110,12 @@ def task_turn_instruction(mode: str, state: dict, user_query: str, budget: float
     lines = [f"User Query:\n{user_query}"]
     if mode == "a-interact" and budget is not None:
         lines.append(f"You have a budget of {budget:.1f} bird-coins.")
+    if mode == "a-interact":
+        lines.extend([
+            "",
+            "Follow the mandatory semantic-grounding contract in the system prompt before drafting or submitting SQL.",
+            "Use the current turn to resolve definitions and schema, then verify output shape and joins before submit_sql.",
+        ])
     if "get_schema" in tools:
         lines.append("Use get_schema if you need to inspect the database structure.")
     if "get_table_schema" in tools:
@@ -100,17 +128,21 @@ def task_turn_instruction(mode: str, state: dict, user_query: str, budget: float
         lines.append("Use the available semantic tools if you need domain definitions.")
     if "ask_user" in tools:
         if mode == "c-interact":
-            lines.append(f'You have {state.get("max_turn", 0)} clarification turns; ask one question at a time with ask_user.')
+            lines.append(f'You have {state.get("max_turn", 0)} clarification turns; ask one focused question at a time with ask_user and use its synchronous answer.')
         else:
-            lines.append("Use ask_user to clarify genuine ambiguities.")
+            lines.append("Use ask_user for any unresolved metric, definition, formula, threshold, or mapping; its answer is synchronous, so incorporate it before continuing.")
     if "execute_sql" in tools:
-        lines.append("Use execute_sql to test SQL when useful.")
+        lines.append("After semantic grounding, use execute_sql only as an optional runtime check; successful execution is not semantic validation.")
     if "submit_sql" in tools:
-        lines.append("Call submit_sql with your final PostgreSQL query.")
+        lines.append("Call submit_sql only after every required metric and condition is grounded in Knowledge and the output grain, counted entity, joins, ordering, and requested columns are checked.")
     return "\n\n".join(lines)
 
 
 def submission_turn_instruction(tools: tuple[str, ...], message: str) -> str:
     if "submit_sql" in tools:
-        return f"{message}\nPlease fix the query and call submit_sql."
+        return (
+            f"{message}\nUse the evaluation feedback and the existing semantic contract to revise the current-phase query, "
+            "then call submit_sql once. If a definition is still genuinely ambiguous, ask one focused synchronous "
+            "question before submitting."
+        )
     return message
