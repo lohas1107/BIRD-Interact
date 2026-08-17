@@ -31,18 +31,50 @@ def _stringify_event_value(value, limit=4000):
 
 
 def _build_timeline(r):
-    """Build a timeline from Claude SDK events; fallback is tool_trajectory."""
+    """Build a timeline from normalized events.
+
+    New results contain only logical ``agent_events``.  The legacy branches
+    below keep reports for existing raw Claude result files readable without
+    exposing their lifecycle metadata in the HTML: system/rate-limit events
+    are dropped, and the remaining message blocks are projected into the same
+    logical timeline.
+    """
     events = r.get("agent_events", [])
     if not events:
+        final = r.get("final_response")
+        if final:
+            return [{"kind": "final", "text": _stringify_event_value(final)}]
         return None
 
     timeline = []
     tool_names = {}
     rendered = 0
+    final_seen = False
+
+    def add_text(text, kind="thinking"):
+        nonlocal rendered
+        text = str(text or "").strip()
+        if text:
+            timeline.append({"kind": kind, "text": text})
+            rendered += 1
+
+    def add_tool_response(block, fallback_name="tool"):
+        nonlocal rendered
+        if not isinstance(block, dict):
+            return
+        tool_id = block.get("id", block.get("tool_use_id", ""))
+        name = block.get("name") or tool_names.get(tool_id, fallback_name)
+        name = _display_tool_name(name)
+        response = block.get("response", block.get("result", block.get("content", "")))
+        timeline.append({
+            "kind": "tool_response",
+            "name": name,
+            "response": _stringify_event_value(response),
+        })
+        rendered += 1
 
     for event in events:
         if not isinstance(event, dict):
-            timeline.append({"kind": "raw", "text": _stringify_event_value(event)})
             continue
 
         event_type = event.get("type")
@@ -51,24 +83,49 @@ def _build_timeline(r):
             rendered += 1
             continue
 
+        if event_type in ("assistant_text", "assistant_message"):
+            add_text(event.get("text", event.get("message", "")))
+            continue
+
+        if event_type == "tool_call":
+            raw_name = event.get("name", "?")
+            name = _display_tool_name(raw_name)
+            tool_id = event.get("id", event.get("tool_use_id", ""))
+            if tool_id:
+                tool_names[tool_id] = name
+            timeline.append({
+                "kind": "tool_call",
+                "name": name,
+                "args": event.get("args", event.get("input", {})),
+            })
+            rendered += 1
+            continue
+
+        if event_type == "tool_response":
+            add_tool_response(event)
+            continue
+
+        if event_type in ("final_response", "final"):
+            final_text = event.get("text", event.get("result", event.get("response", "")))
+            if final_text:
+                add_text(_stringify_event_value(final_text), kind="final")
+                final_seen = True
+            continue
+
+        # Legacy Claude SDK message projection.
         if event_type == "AssistantMessage":
             for block in event.get("content", []) or []:
                 if not isinstance(block, dict):
                     continue
                 if "text" in block:
-                    text = str(block.get("text", "")).strip()
-                    if text:
-                        timeline.append({"kind": "thinking", "text": text})
-                        rendered += 1
+                    add_text(block.get("text", ""))
                 elif "thinking" in block:
-                    text = str(block.get("thinking", "")).strip()
-                    if text:
-                        timeline.append({"kind": "thinking", "text": text})
-                        rendered += 1
+                    add_text(block.get("thinking", ""))
                 elif "name" in block and "input" in block:
                     raw_name = block.get("name", "?")
                     name = _display_tool_name(raw_name)
-                    tool_names[block.get("id", "")] = name
+                    tool_id = block.get("id", "")
+                    tool_names[tool_id] = name
                     timeline.append({
                         "kind": "tool_call",
                         "name": name,
@@ -83,27 +140,26 @@ def _build_timeline(r):
             for block in blocks:
                 if not isinstance(block, dict) or "tool_use_id" not in block:
                     continue
-                name = tool_names.get(block.get("tool_use_id", ""), "tool")
-                timeline.append({
-                    "kind": "tool_response",
-                    "name": name,
-                    "response": _stringify_event_value(block.get("content", "")),
-                })
-                rendered += 1
+                add_tool_response(block)
             continue
 
         if event_type == "ResultMessage":
             result = event.get("result")
             if result:
-                timeline.append({"kind": "final", "text": _stringify_event_value(result)})
-                rendered += 1
+                add_text(_stringify_event_value(result), kind="final")
+                final_seen = True
             continue
 
-        timeline.append({
-            "kind": "raw",
-            "text": _stringify_event_value(event),
-        })
-        rendered += 1
+        # These SDK lifecycle events are intentionally absent from new
+        # results.  Ignore them when reading old results as well.
+        if event_type in ("SystemMessage", "RateLimitEvent"):
+            continue
+
+        # Unknown provider events are intentionally not rendered.  This
+        # keeps the report provider-neutral if the SDK adds another envelope.
+
+    if not final_seen and r.get("final_response"):
+        add_text(_stringify_event_value(r["final_response"]), kind="final")
 
     return timeline if rendered else None
 
@@ -169,10 +225,6 @@ def _render_ev(kind, **kw):
         return f"""<div class="ev final-response">
             <div class="ev-header"><span class="ev-icon">✅</span><span class="ev-label">Final Response</span></div>
             <pre class="ev-body">{_esc(kw["text"])}</pre></div>"""
-    if kind == "raw":
-        return f"""<div class="ev raw-event">
-            <div class="ev-header"><span class="ev-icon">ℹ️</span><span class="ev-label">SDK Event</span></div>
-            <pre class="ev-body">{_esc(kw["text"])}</pre></div>"""
     return ""
 
 
@@ -227,8 +279,6 @@ def _build_timeline_html(timeline, traj_costs):
         elif kind == "final":
             _flush()
             steps.append([("final", {"text": item["text"]})])
-        elif kind == "raw":
-            current_step.append(("raw", {"text": item["text"]}))
     _flush()
 
     # Render steps

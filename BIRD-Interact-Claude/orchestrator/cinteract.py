@@ -139,6 +139,7 @@ async def run_single_task(task_data: dict, tool_profile: dict | None = None) -> 
         }
         await init_agent_session(instance_id, session_state)
         all_agent_events = []
+        final_response = ""
 
         # ── Phase 1: Clarify + Submit ──
         logger.info("  [%s] Phase 1: %d clarification turns", instance_id, max_turn)
@@ -147,6 +148,7 @@ async def run_single_task(task_data: dict, tool_profile: dict | None = None) -> 
         )
         result = await run_agent_session(instance_id, phase1_msg)
         state = result.get("state", {})
+        final_response = result.get("response", "")
         all_agent_events.extend(state.get("agent_events", []))
         p1_passed = state.get("phase1_completed", False)
         logger.info("  [%s] Phase 1: %s", instance_id, "PASS" if p1_passed else "FAIL")
@@ -166,6 +168,7 @@ async def run_single_task(task_data: dict, tool_profile: dict | None = None) -> 
 
             result = await run_agent_session(instance_id, debug_msg)
             state = result.get("state", {})
+            final_response = result.get("response", "")
             all_agent_events = list(state.get("agent_events", []))
             debug_passed = state.get("phase1_completed", False)
             logger.info("  [%s] Phase 1 Debug: %s", instance_id, "PASS" if debug_passed else "FAIL")
@@ -182,6 +185,7 @@ async def run_single_task(task_data: dict, tool_profile: dict | None = None) -> 
             fu_msg = task_turn_instruction("c-interact", session_state, follow_up_query)
             result = await run_agent_session(instance_id, fu_msg)
             state = result.get("state", {})
+            final_response = result.get("response", "")
             all_agent_events = list(state.get("agent_events", []))
             p2_passed = state.get("phase2_completed", False)
             logger.info("  [%s] Phase 2: %s", instance_id, "PASS" if p2_passed else "FAIL")
@@ -201,6 +205,7 @@ async def run_single_task(task_data: dict, tool_profile: dict | None = None) -> 
 
                 result = await run_agent_session(instance_id, p2_debug_msg)
                 state = result.get("state", {})
+                final_response = result.get("response", "")
                 all_agent_events = list(state.get("agent_events", []))
                 p2_passed = state.get("phase2_completed", False)
                 logger.info("  [%s] Phase 2 Debug: %s", instance_id, "PASS" if p2_passed else "FAIL")
@@ -221,6 +226,7 @@ async def run_single_task(task_data: dict, tool_profile: dict | None = None) -> 
             "tool_trajectory": state.get("tool_trajectory", []),
             "dialogue_history": state.get("dialogue_history", []),
             "agent_events": all_agent_events,
+            "final_response": final_response,
         }
         logger.info("Task %s done. Reward: %.2f, Time: %.1fs", instance_id, total_reward, elapsed)
         return result

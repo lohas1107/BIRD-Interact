@@ -7,6 +7,23 @@ from orchestrator.report import _build_timeline, generate_html
 
 
 class ClaudeReportTests(unittest.TestCase):
+    def test_builds_timeline_from_normalized_events(self):
+        result = {
+            "agent_events": [
+                {"type": "user_message", "message": "Solve this"},
+                {"type": "assistant_text", "text": "I will submit the query."},
+                {"type": "tool_call", "id": "tool-1", "name": "submit_sql", "args": {"sql": "SELECT 1"}},
+                {"type": "tool_response", "id": "tool-1", "name": "submit_sql", "response": "SQL passed."},
+                {"type": "final_response", "text": "Done", "final": True},
+            ],
+        }
+        timeline = _build_timeline(result)
+        self.assertEqual(
+            [item["kind"] for item in timeline],
+            ["user_msg", "thinking", "tool_call", "tool_response", "final"],
+        )
+        self.assertEqual(timeline[3]["response"], "SQL passed.")
+
     def test_builds_timeline_from_claude_events(self):
         result = {
             "agent_events": [
@@ -47,14 +64,26 @@ class ClaudeReportTests(unittest.TestCase):
         self.assertEqual(kinds, ["user_msg", "thinking", "tool_call", "tool_response", "final"])
         self.assertEqual(timeline[2]["name"], "submit_sql")
 
-    def test_unknown_event_is_rendered_and_adk_events_are_ignored(self):
+    def test_legacy_lifecycle_events_are_not_rendered(self):
+        result = {
+            "agent_events": [
+                {"type": "SystemMessage", "subtype": "init", "data": {"cwd": "/secret"}},
+                {"type": "RateLimitEvent", "uuid": "secret"},
+                {"type": "AssistantMessage", "content": [{"thinking": "", "signature": "secret"}]},
+                {"type": "ResultMessage", "result": "Done"},
+            ]
+        }
+        timeline = _build_timeline(result)
+        self.assertEqual([item["kind"] for item in timeline], ["final"])
+        self.assertNotIn("secret", json.dumps(timeline))
+
+    def test_unknown_event_is_ignored_and_adk_events_are_ignored(self):
         result = {
             "adk_events": [{"type": "adk_event", "content": {}}],
             "agent_events": [{"type": "FutureClaudeEvent", "payload": {"x": 1}}],
         }
         timeline = _build_timeline(result)
-        self.assertEqual(timeline[0]["kind"], "raw")
-        self.assertIn("FutureClaudeEvent", timeline[0]["text"])
+        self.assertIsNone(timeline)
 
     def test_report_falls_back_to_tool_trajectory(self):
         data = {
