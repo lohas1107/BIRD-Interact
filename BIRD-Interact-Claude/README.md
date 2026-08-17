@@ -33,7 +33,7 @@ state rather than model-controlled prompts.
 Install dependencies with Python only:
 
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
