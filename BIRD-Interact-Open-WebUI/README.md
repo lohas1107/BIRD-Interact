@@ -65,9 +65,10 @@ docker compose logs -f postgresql
 ### 3. Install dependencies
 
 ```bash
-conda create -p ./.venv python=3.10 -y
-source activate ./.venv
-pip install -r requirements.txt
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
 ### 4. Configure
