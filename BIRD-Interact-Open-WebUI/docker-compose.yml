@@ -4,6 +4,7 @@ services:
     image: ghcr.io/open-webui/open-webui:v0.11.0
     container_name: bird_interact_open_webui
     environment:
+      ENABLE_API_KEYS: "True"
       ENABLE_OPENAI_API: "True"
       OPENAI_API_BASE_URLS: "${OPENAI_API_BASE_URLS:-http://192.168.1.233:8000/v1}"
       OPENAI_API_KEYS: "${OPENAI_API_KEYS:-}"
