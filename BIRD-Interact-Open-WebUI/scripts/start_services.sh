@@ -20,23 +20,14 @@ HOST="${SERVICE_HOST:-127.0.0.1}"
 SYSTEM_PORT="${SYSTEM_AGENT_PORT:-6000}"
 USER_PORT="${USER_SIM_PORT:-6001}"
 DB_PORT="${DB_ENV_PORT:-6002}"
-PID_DIR="${BIRD_INTERACT_PID_DIR:-/tmp/bird-interact-open-webui}"
-mkdir -p "$PID_DIR"
 
-for service in system user db; do
-    pid_file="$PID_DIR/${service}.pid"
-    if [ -f "$pid_file" ]; then
-        pid="$(cat "$pid_file")"
-        kill "$pid" 2>/dev/null || true
-        rm -f "$pid_file"
-    fi
-done
+pkill -f uvicorn 2>/dev/null || true
 sleep 1
 
 # Start all three microservices
-"$PYTHON_BIN" -m uvicorn system_agent.server:app --host "$HOST" --port "$SYSTEM_PORT" --log-level warning & echo $! > "$PID_DIR/system.pid"
-"$PYTHON_BIN" -m uvicorn user_simulator.server:app --host "$HOST" --port "$USER_PORT" --log-level warning & echo $! > "$PID_DIR/user.pid"
-"$PYTHON_BIN" -m uvicorn db_environment.server:app --host "$HOST" --port "$DB_PORT" --log-level warning & echo $! > "$PID_DIR/db.pid"
+"$PYTHON_BIN" -m uvicorn system_agent.server:app --host "$HOST" --port "$SYSTEM_PORT" --log-level warning &
+"$PYTHON_BIN" -m uvicorn user_simulator.server:app --host "$HOST" --port "$USER_PORT" --log-level warning &
+"$PYTHON_BIN" -m uvicorn db_environment.server:app --host "$HOST" --port "$DB_PORT" --log-level warning &
 
 # Wait for all three to be healthy
 for i in $(seq 1 30); do
