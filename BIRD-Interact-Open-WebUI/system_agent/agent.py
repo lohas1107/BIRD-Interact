@@ -59,17 +59,10 @@ def build_system_prompt(mode: str, state: Dict[str, Any]) -> str:
     return AINTERACT_INSTRUCTION
 
 
-def tool_names_for_mode(mode: str) -> List[str]:
-    if mode == "c-interact":
-        return ["ask_user", "submit_sql"]
-    return [
-        "execute_sql",
-        "get_schema",
-        "get_all_column_meanings",
-        "get_column_meaning",
-        "get_all_external_knowledge_names",
-        "get_knowledge_definition",
-        "get_all_knowledge_definitions",
-        "ask_user",
-        "submit_sql",
-    ]
+def tool_names_for_mode(mode: str, state: Dict[str, Any] | None = None) -> List[str]:
+    """Return the session profile's ordered tools, with mode fallback."""
+    if state and isinstance(state.get("tool_profile"), dict):
+        return list(state["tool_profile"].get("tools", ()))
+    from shared.tool_profiles import resolve_tool_profile
+
+    return list(resolve_tool_profile(mode).tools)

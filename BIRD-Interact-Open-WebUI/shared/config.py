@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     patience: int = 3
 
     @property
+    def project_root(self) -> Path:
+        """Project root used by configuration-backed runtime assets."""
+        return PROJECT_ROOT
+
+    @property
     def data_dir(self) -> Path:
         return PROJECT_ROOT / f"bird-interact-{self.dataset}"
 

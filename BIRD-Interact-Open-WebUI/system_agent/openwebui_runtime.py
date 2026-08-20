@@ -11,8 +11,9 @@ from typing import Any, Dict, List, Optional
 
 from shared.config import settings
 from shared.llm import get_client
-from system_agent.agent import build_system_prompt, tool_names_for_mode
-from system_agent.tools import TOOL_COSTS, execute_tool, schemas_for
+from shared.tool_profiles import resolve_session_tool_profile
+from system_agent.agent import build_system_prompt
+from system_agent.tools import execute_tool, has_tool, schemas_for, tool_cost
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,8 @@ class OpenWebUIRuntime:
 
     def _new_state(self, mode: str, state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         result = dict(state or {})
+        profile = resolve_session_tool_profile(mode, result)
+        result["tool_profile"] = profile.as_dict()
         result.setdefault("mode", mode)
         result.setdefault("tool_trajectory", [])
         result.setdefault("dialogue_history", [])
@@ -64,6 +67,17 @@ class OpenWebUIRuntime:
         result["adk_events"] = events  # legacy response-key compatibility
         return result
 
+    @staticmethod
+    def _session_response(session: Session) -> Dict[str, Any]:
+        profile = session.state["tool_profile"]
+        return {
+            "task_id": session.task_id,
+            "mode": session.mode,
+            "session_id": session.session_id,
+            "runtime": "openwebui",
+            "tool_profile": {"name": profile["name"], "tools": list(profile["tools"])},
+        }
+
     async def init_session(
         self,
         task_id: str,
@@ -75,12 +89,9 @@ class OpenWebUIRuntime:
             key = (mode, task_id)
             if key in self._sessions and not reset:
                 session = self._sessions[key]
-                return {
-                    "task_id": task_id,
-                    "mode": mode,
-                    "session_id": session.session_id,
-                    "runtime": "openwebui",
-                }
+                # reset=False intentionally ignores all incoming state.  In
+                # particular, a new profile cannot mutate a live session.
+                return self._session_response(session)
 
             session_state = self._new_state(mode, state)
             session = Session(
@@ -96,12 +107,13 @@ class OpenWebUIRuntime:
                 ],
             )
             self._sessions[key] = session
-            return {
-                "task_id": task_id,
-                "mode": mode,
-                "session_id": session.session_id,
-                "runtime": "openwebui",
-            }
+            return self._session_response(session)
+
+    async def cleanup_session(self, task_id: str, mode: str) -> Dict[str, Any]:
+        """Drop one runtime session; repeated cleanup is harmless."""
+        async with self._lock:
+            self._sessions.pop((mode, task_id), None)
+        return {"status": "ok", "task_id": task_id}
 
     @staticmethod
     def _parse_arguments(raw: Any) -> Dict[str, Any]:
@@ -130,6 +142,9 @@ class OpenWebUIRuntime:
         result: str,
         before: Optional[float],
         after: Optional[float],
+        *,
+        cost: Optional[float] = None,
+        is_error: bool = False,
     ) -> str:
         trajectory = session.state.setdefault("tool_trajectory", [])
         trajectory.append({
@@ -137,25 +152,88 @@ class OpenWebUIRuntime:
             "tool": name,
             "args": args,
             "result": self._preview(result),
-            "cost": TOOL_COSTS.get(name, 0.0),
+            "cost": tool_cost(name) if cost is None else cost,
             "budget_before": before,
             "budget_after": after,
+            "is_error": is_error,
         })
         if after is not None and after >= 0:
             initial = session.state.get("initial_budget", 0.0)
             result += f"\n\n[SYSTEM NOTE: Remaining budget: {after:.1f}/{initial:.1f}]"
         if session.mode == "c-interact" and name == "ask_user":
             max_turn = session.state.get("max_turn", 0)
-            asks_used = sum(1 for item in trajectory if item.get("tool") == "ask_user")
+            asks_used = sum(
+                1
+                for item in trajectory
+                if item.get("tool") == "ask_user" and not item.get("is_error", False)
+            )
             result += f"\n\n[SYSTEM NOTE: Clarification turns remaining: {max(0, max_turn - asks_used)}/{max_turn}]"
         return result
 
     def _run_tool(self, session: Session, name: str, args: Dict[str, Any]) -> str:
-        cost = TOOL_COSTS.get(name, 0.0)
+        """Apply profile/turn controls, budget accounting, and dispatch."""
+        session.state["_last_tool_is_error"] = False
+        profile = session.state.get("tool_profile")
+        allowed = tuple(profile.get("tools", ())) if isinstance(profile, dict) else None
+        profile_name = profile.get("name", "<unnamed>") if isinstance(profile, dict) else "<default>"
+
+        # Check the registry before the profile.  A typo is UNKNOWN_TOOL even
+        # when the profile is restrictive; a known but unselected tool is a
+        # profile violation.  Neither path reaches a service handler.
+        if not has_tool(name):
+            session.state["_last_tool_is_error"] = True
+            return self._budget_result(
+                session,
+                name,
+                args,
+                f"UNKNOWN_TOOL: {name}",
+                session.state.get("budget_remaining"),
+                session.state.get("budget_remaining"),
+                cost=0.0,
+                is_error=True,
+            )
+        if allowed is not None and name not in allowed:
+            session.state["_last_tool_is_error"] = True
+            return self._budget_result(
+                session,
+                name,
+                args,
+                f"TOOL_NOT_ALLOWED: {name} is not enabled by profile {profile_name}",
+                session.state.get("budget_remaining"),
+                session.state.get("budget_remaining"),
+                cost=0.0,
+                is_error=True,
+            )
+
+        # A c-interact orchestrator turn may contain at most one submission.
+        # Mark the first attempt before dispatch so a failed submission still
+        # consumes the one call slot, while the second call never reaches DB.
+        if session.mode == "c-interact" and name == "submit_sql":
+            if (
+                session.state.get("_submitted_this_phase", False)
+                or session.state.get("_submitted_this_turn", False)
+            ):
+                session.state["_last_tool_is_error"] = True
+                return self._budget_result(
+                    session,
+                    name,
+                    args,
+                    "TOOL_CALL_LIMIT: submit_sql may be called at most once per c-interact turn",
+                    session.state.get("budget_remaining"),
+                    session.state.get("budget_remaining"),
+                    cost=0.0,
+                    is_error=True,
+                )
+            session.state["_submitted_this_phase"] = True
+            session.state["_submitted_this_turn"] = True
+
+        cost = tool_cost(name)
+        session.state["_last_tool_dispatch_error"] = False
         budget = session.state.get("budget_remaining")
         before = budget
         if budget is not None and budget < cost:
             if name != "submit_sql":
+                session.state["_last_tool_is_error"] = True
                 return self._budget_result(
                     session,
                     name,
@@ -163,6 +241,8 @@ class OpenWebUIRuntime:
                     f"Budget exhausted ({budget:.1f} remaining). You MUST call submit_sql now with your best SQL.",
                     before,
                     budget,
+                    cost=cost,
+                    is_error=True,
                 )
             session.state["budget_remaining"] = -1
         elif budget is not None:
@@ -170,8 +250,25 @@ class OpenWebUIRuntime:
             session.state["budget_remaining"] = -1 if name == "submit_sql" and remaining <= 0 else remaining
 
         after = session.state.get("budget_remaining")
-        result = execute_tool(name, args, session.task_id, session.state)
-        return self._budget_result(session, name, args, result, before, after)
+        result = execute_tool(
+            name,
+            args,
+            session.task_id,
+            session.state,
+            allowed_tools=allowed,
+        )
+        is_error = bool(session.state.get("_last_tool_dispatch_error", False))
+        session.state["_last_tool_is_error"] = is_error
+        return self._budget_result(
+            session,
+            name,
+            args,
+            result,
+            before,
+            after,
+            cost=cost,
+            is_error=is_error,
+        )
 
     async def run_turn(
         self,
@@ -188,13 +285,15 @@ class OpenWebUIRuntime:
         # c-interact deliberately permits one submission per orchestrator turn.
         if mode == "c-interact":
             session.state["_submitted_this_phase"] = False
+            session.state["_submitted_this_turn"] = False
         session.messages.append({"role": "user", "content": message})
         self._record(session, {"type": "user_message", "message": self._preview(message, 1200)})
 
         response_text = ""
         last_tool_result = ""
         client = get_client()
-        tool_schemas = schemas_for(tool_names_for_mode(mode))
+        profile_tools = tuple(session.state.get("tool_profile", {}).get("tools", ()))
+        tool_schemas = schemas_for(profile_tools)
 
         while True:
             if session.state.get("task_done"):
@@ -244,7 +343,19 @@ class OpenWebUIRuntime:
                 except (TypeError, ValueError, json.JSONDecodeError) as exc:
                     args = {}
                     result = f"Invalid JSON arguments for {name}: {exc}"
-                    result = self._budget_result(session, name, args, result, None, session.state.get("budget_remaining"))
+                    session.state["_last_tool_is_error"] = True
+                    result = self._budget_result(
+                        session,
+                        name,
+                        args,
+                        result,
+                        session.state.get("budget_remaining"),
+                        session.state.get("budget_remaining"),
+                        cost=0.0,
+                        is_error=True,
+                    )
+
+                is_error = bool(session.state.get("_last_tool_is_error", False))
 
                 call_id = self._tool_call_id(call, index)
                 self._record(session, {
@@ -252,6 +363,7 @@ class OpenWebUIRuntime:
                     "tool": name,
                     "tool_call_id": call_id,
                     "args": args,
+                    "is_error": is_error,
                 })
                 session.messages.append({
                     "role": "tool",
@@ -264,7 +376,15 @@ class OpenWebUIRuntime:
                     "tool": name,
                     "tool_call_id": call_id,
                     "result": self._preview(result),
+                    "is_error": is_error,
                 })
+                if is_error:
+                    self._record(session, {
+                        "type": "tool_error",
+                        "tool": name,
+                        "tool_call_id": call_id,
+                        "error": self._preview(result),
+                    })
                 last_tool_result = result
                 if name == "submit_sql":
                     if mode == "c-interact":

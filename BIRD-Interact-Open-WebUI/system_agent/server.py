@@ -15,9 +15,10 @@ import logging
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from shared.config import settings
+from shared.tool_profiles import InvalidToolProfile
 from system_agent.openwebui_runtime import OpenWebUIRuntime
 
 logger = logging.getLogger(__name__)
@@ -30,13 +31,21 @@ runtime = OpenWebUIRuntime()
 class SessionInitRequest(BaseModel):
     task_id: str
     mode: str = "a-interact"
-    state: Dict[str, Any] = {}
+    state: Dict[str, Any] = Field(default_factory=dict)
     reset: bool = True
+    # Optional convenience for direct API callers.  The evaluation CLI still
+    # carries the resolved snapshot in state.tool_profile.
+    tool_profile: Optional[Any] = None
 
 
 class SessionRunRequest(BaseModel):
     task_id: str
     message: str
+    mode: str = "a-interact"
+
+
+class SessionCleanupRequest(BaseModel):
+    task_id: str
     mode: str = "a-interact"
 
 
@@ -47,12 +56,28 @@ async def init_session(req: SessionInitRequest):
     """Initialize a local BIRD session backed by Open WebUI."""
     if not runtime.available:
         raise HTTPException(status_code=503, detail=f"Open WebUI runtime unavailable: {runtime.error}")
-    return await runtime.init_session(
-        task_id=req.task_id,
-        mode=req.mode,
-        state=req.state,
-        reset=req.reset,
-    )
+    state = dict(req.state)
+    if req.tool_profile is not None and "tool_profile" not in state:
+        state["tool_profile"] = req.tool_profile
+    try:
+        return await runtime.init_session(
+            task_id=req.task_id,
+            mode=req.mode,
+            state=state,
+            reset=req.reset,
+        )
+    except InvalidToolProfile as exc:
+        raise HTTPException(status_code=400, detail=exc.as_detail()) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INVALID_TOOL_PROFILE",
+                "profile": state.get("tool_profile"),
+                "tool": None,
+                "message": str(exc),
+            },
+        ) from exc
 
 
 @app.post("/run_session")
@@ -65,6 +90,12 @@ async def run_session(req: SessionRunRequest):
         mode=req.mode,
         message=req.message,
     )
+
+
+@app.post("/cleanup_session")
+async def cleanup_session(req: SessionCleanupRequest):
+    """Release the in-process runtime state for one task."""
+    return await runtime.cleanup_session(req.task_id, req.mode)
 
 
 @app.get("/health")

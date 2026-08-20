@@ -4,25 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Mapping
 
 import httpx
 
 from shared.config import settings
 
 logger = logging.getLogger(__name__)
-
-TOOL_COSTS = {
-    "execute_sql": 1.0,
-    "get_schema": 1.0,
-    "get_all_column_meanings": 1.0,
-    "get_column_meaning": 0.5,
-    "get_all_external_knowledge_names": 0.5,
-    "get_knowledge_definition": 0.5,
-    "get_all_knowledge_definitions": 1.0,
-    "ask_user": 2.0,
-    "submit_sql": 3.0,
-}
 
 
 def _schema(name: str, description: str, properties: Dict[str, Any] | None = None,
@@ -42,7 +31,17 @@ def _schema(name: str, description: str, properties: Dict[str, Any] | None = Non
     }
 
 
-TOOL_SCHEMAS = {
+@dataclass(frozen=True)
+class ToolSpec:
+    """The complete runtime definition of one OpenAI-compatible BIRD tool."""
+
+    name: str
+    schema: Dict[str, Any]
+    cost: float
+    handler: Callable[[Dict[str, Any], str, Dict[str, Any]], str]
+
+
+_SCHEMAS = {
     "execute_sql": _schema(
         "execute_sql",
         "Execute a PostgreSQL query against the current task database. Cost: 1 bird-coin.",
@@ -91,10 +90,6 @@ TOOL_SCHEMAS = {
         ["sql"],
     ),
 }
-
-
-def schemas_for(names: list[str]) -> list[Dict[str, Any]]:
-    return [TOOL_SCHEMAS[name] for name in names]
 
 
 def _db_url(path: str) -> str:
@@ -215,27 +210,119 @@ def _submit_sql(task_id: str, args: Dict[str, Any], state: Dict[str, Any]) -> st
     return "\n".join(part for part in parts if part)
 
 
-def execute_tool(name: str, args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+def _handle_execute_sql(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _execute_sql(task_id, args)
+
+
+def _handle_get_schema(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _get_schema(task_id)
+
+
+def _handle_get_all_column_meanings(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _get_column_meanings(task_id)
+
+
+def _handle_get_column_meaning(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _get_column_meaning(task_id, args)
+
+
+def _handle_get_all_external_knowledge_names(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _get_knowledge_names(task_id)
+
+
+def _handle_get_knowledge_definition(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _get_knowledge(task_id, args)
+
+
+def _handle_get_all_knowledge_definitions(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _get_all_knowledge(task_id)
+
+
+def _handle_ask_user(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _ask_user(task_id, args, state)
+
+
+def _handle_submit_sql(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _submit_sql(task_id, args, state)
+
+
+def _build_registry() -> dict[str, ToolSpec]:
+    """Build the only source of truth for schemas, costs, and dispatch."""
+    definitions = (
+        ("execute_sql", 1.0, _handle_execute_sql),
+        ("get_schema", 1.0, _handle_get_schema),
+        ("get_all_column_meanings", 1.0, _handle_get_all_column_meanings),
+        ("get_column_meaning", 0.5, _handle_get_column_meaning),
+        ("get_all_external_knowledge_names", 0.5, _handle_get_all_external_knowledge_names),
+        ("get_knowledge_definition", 0.5, _handle_get_knowledge_definition),
+        ("get_all_knowledge_definitions", 1.0, _handle_get_all_knowledge_definitions),
+        ("ask_user", 2.0, _handle_ask_user),
+        ("submit_sql", 3.0, _handle_submit_sql),
+    )
+    return {
+        name: ToolSpec(name=name, schema=_SCHEMAS[name], cost=cost, handler=handler)
+        for name, cost, handler in definitions
+    }
+
+
+TOOL_REGISTRY: Mapping[str, ToolSpec] = _build_registry()
+
+# Compatibility views for existing callers.  Definitions remain in
+# TOOL_REGISTRY; these mappings are derived and contain no independent data.
+TOOL_SCHEMAS: Mapping[str, Dict[str, Any]] = {
+    name: spec.schema for name, spec in TOOL_REGISTRY.items()
+}
+TOOL_COSTS: Mapping[str, float] = {
+    name: spec.cost for name, spec in TOOL_REGISTRY.items()
+}
+
+
+def tool_names() -> tuple[str, ...]:
+    """Return legal logical names in registry insertion order."""
+    return tuple(TOOL_REGISTRY)
+
+
+def schemas_for(names: list[str] | tuple[str, ...]) -> list[Dict[str, Any]]:
+    """Return schemas in exactly the order supplied by a session profile."""
+    return [TOOL_REGISTRY[name].schema for name in names]
+
+
+def has_tool(name: str) -> bool:
+    return name in TOOL_REGISTRY
+
+
+def tool_cost(name: str) -> float:
+    spec = TOOL_REGISTRY.get(name)
+    return spec.cost if spec else 0.0
+
+
+def execute_tool(
+    name: str,
+    args: Dict[str, Any],
+    task_id: str,
+    state: Dict[str, Any],
+    allowed_tools: list[str] | tuple[str, ...] | None = None,
+) -> str:
+    """Dispatch one tool after applying the session profile allowlist."""
+    spec = TOOL_REGISTRY.get(name)
+    if spec is None:
+        state["_last_tool_dispatch_error"] = True
+        return f"UNKNOWN_TOOL: {name}"
+
+    if allowed_tools is None:
+        profile = state.get("tool_profile")
+        if isinstance(profile, dict) and "tools" in profile:
+            allowed_tools = profile.get("tools") or []
+    if allowed_tools is not None and name not in allowed_tools:
+        profile = state.get("tool_profile") or {}
+        profile_name = profile.get("name", "<unnamed>") if isinstance(profile, dict) else str(profile)
+        state["_last_tool_dispatch_error"] = True
+        return f"TOOL_NOT_ALLOWED: {name} is not enabled by profile {profile_name}"
+
+    state["_last_tool_dispatch_error"] = False
     try:
-        if name == "execute_sql":
-            return _execute_sql(task_id, args)
-        if name == "get_schema":
-            return _get_schema(task_id)
-        if name == "get_all_column_meanings":
-            return _get_column_meanings(task_id)
-        if name == "get_column_meaning":
-            return _get_column_meaning(task_id, args)
-        if name == "get_all_external_knowledge_names":
-            return _get_knowledge_names(task_id)
-        if name == "get_knowledge_definition":
-            return _get_knowledge(task_id, args)
-        if name == "get_all_knowledge_definitions":
-            return _get_all_knowledge(task_id)
-        if name == "ask_user":
-            return _ask_user(task_id, args, state)
-        if name == "submit_sql":
-            return _submit_sql(task_id, args, state)
-        return f"Unknown tool: {name}"
+        return spec.handler(args, task_id, state)
     except Exception as exc:
         logger.exception("Tool %s failed", name)
+        state["_last_tool_dispatch_error"] = True
         return f"Error calling {name}: {type(exc).__name__}: {exc}"

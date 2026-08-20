@@ -6,6 +6,7 @@ import json
 import logging
 import time
 import traceback
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Awaitable, Dict, List
 
@@ -13,6 +14,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared.config import settings
+from shared.tool_profiles import resolve_tool_profile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -24,6 +26,7 @@ async def run_parallel_evaluation(
     output_path: str,
     concurrency: int = 5,
     mode: str = "a-interact",
+    tool_profile: dict | None = None,
 ):
     semaphore = asyncio.Semaphore(concurrency)
     results: List[Dict[str, Any]] = []
@@ -36,21 +39,21 @@ async def run_parallel_evaluation(
 
     async def _save():
         n = len(results)
-        if n == 0:
-            return
         output = {
             "mode": mode,
             "metrics": {
                 "total_tasks": n,
                 "total_reward": total_reward,
-                "average_reward": total_reward / n,
-                "phase1_rate": p1_count / n,
-                "phase2_rate": p2_count / n,
+                "average_reward": total_reward / n if n else 0,
+                "phase1_rate": p1_count / n if n else 0,
+                "phase2_rate": p2_count / n if n else 0,
                 "phase1_count": p1_count,
                 "phase2_count": p2_count,
             },
             "results": results,
         }
+        if tool_profile is not None:
+            output["tool_profile"] = tool_profile
         with open(output_path, "w") as f:
             json.dump(output, f, indent=2, default=str)
 
@@ -172,16 +175,33 @@ def main():
     parser.add_argument("--output", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--concurrency", type=int, default=5)
+    parser.add_argument("--tool-profile", default=None)
+    parser.add_argument("--tool-profiles-file", default=None)
     args = parser.parse_args()
+
+    if args.mode == "oracle" and (
+        args.tool_profile is not None or args.tool_profiles_file is not None
+    ):
+        parser.error("oracle mode does not support --tool-profile or --tool-profiles-file")
 
     output = args.output or f"results/eval_{args.mode.replace('-', '_')}.json"
 
-    if args.mode == "oracle":
-        run_single_task = run_oracle_task
-    elif args.mode == "a-interact":
-        from orchestrator.ainteract import run_single_task
-    else:
-        from orchestrator.cinteract import run_single_task
+    try:
+        if args.mode == "oracle":
+            run_single_task = run_oracle_task
+            profile = None
+        elif args.mode == "a-interact":
+            from orchestrator.ainteract import run_single_task
+            profile = resolve_tool_profile(args.mode, args.tool_profile, args.tool_profiles_file)
+            run_single_task = partial(run_single_task, tool_profile=profile.as_dict())
+        else:
+            from orchestrator.cinteract import run_single_task
+            profile = resolve_tool_profile(args.mode, args.tool_profile, args.tool_profiles_file)
+            run_single_task = partial(run_single_task, tool_profile=profile.as_dict())
+    except ValueError as exc:
+        # Resolve before loading task data so an invalid CLI profile cannot
+        # start an evaluation or touch task state.
+        parser.error(str(exc))
 
     tasks = load_tasks(args.data, args.limit)
     logger.info("%s: Evaluating %d tasks with concurrency=%d", args.mode, len(tasks), args.concurrency)
@@ -192,6 +212,7 @@ def main():
         output_path=output,
         concurrency=args.concurrency,
         mode=args.mode,
+        tool_profile=profile.as_dict() if profile else None,
     ))
 
 
