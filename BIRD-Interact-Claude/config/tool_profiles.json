@@ -22,6 +22,15 @@
     "ask_user",
     "submit_sql"
   ],
+  "raw-1": [
+    "ask_user",
+    "submit_sql"
+  ],
+  "raw-2": [
+    "ask_user",
+    "execute_sql",
+    "submit_sql"
+  ],
   "kg-v1": [
     "ask_user",
     "search_semantic_context",
