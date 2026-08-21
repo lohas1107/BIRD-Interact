@@ -35,6 +35,29 @@
         "ask_user",
         "submit_sql"
       ]
+    },
+    "raw-1": {
+      "prompt_file": "prompts/a-interact-default.md",
+      "tools": [
+        "ask_user",
+        "submit_sql"
+      ]
+    },
+    "raw-2": {
+      "prompt_file": "prompts/a-interact-default.md",
+      "tools": [
+        "ask_user",
+        "execute_sql",
+        "submit_sql"
+      ]
+    },
+    "raw-3": {
+      "prompt_file": "prompts/a-interact-default.md",
+      "tools": [
+        "ask_user",
+        "get_schema",
+        "submit_sql"
+      ]
     }
   }
 }
