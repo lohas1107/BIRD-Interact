@@ -1,0 +1,40 @@
+{
+  "defaults": {
+    "a-interact": "a-interact-default",
+    "c-interact": "c-interact-default"
+  },
+  "profiles": {
+    "a-interact-default": {
+      "prompt_file": "prompts/a-interact-default.md",
+      "tools": [
+        "ask_user",
+        "get_schema",
+        "get_all_column_meanings",
+        "get_column_meaning",
+        "get_all_external_knowledge_names",
+        "get_knowledge_definition",
+        "get_all_knowledge_definitions",
+        "execute_sql",
+        "submit_sql"
+      ]
+    },
+    "a-interact-schema": {
+      "prompt_file": "prompts/a-interact-schema.md",
+      "tools": [
+        "ask_user",
+        "get_schema",
+        "get_all_column_meanings",
+        "get_column_meaning",
+        "execute_sql",
+        "submit_sql"
+      ]
+    },
+    "c-interact-default": {
+      "prompt_file": "prompts/c-interact-default.md",
+      "tools": [
+        "ask_user",
+        "submit_sql"
+      ]
+    }
+  }
+}

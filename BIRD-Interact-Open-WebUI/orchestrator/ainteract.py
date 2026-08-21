@@ -23,7 +23,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared.config import settings
-from shared.tool_profiles import resolve_tool_profile
+from shared.agent_profiles import resolve_agent_profile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -69,9 +69,9 @@ async def init_agent_session(
     task_id: str,
     task_data: dict,
     budget: float,
-    tool_profile: dict | None = None,
+    agent_profile: dict | None = None,
 ):
-    tool_profile = tool_profile or resolve_tool_profile("a-interact").as_dict()
+    agent_profile = agent_profile or resolve_agent_profile("a-interact").as_snapshot()
     state = {
         "task_id": task_id,
         "db_name": task_data["selected_database"],
@@ -86,11 +86,16 @@ async def init_agent_session(
         "phase1_completed": False,
         "phase2_completed": False,
         "task_done": False,
-        "tool_profile": tool_profile,
     }
     return await _post(
         f"{SYSTEM_AGENT_URL}/init_session",
-        {"task_id": task_id, "mode": "a-interact", "state": state, "reset": True},
+        {
+            "task_id": task_id,
+            "mode": "a-interact",
+            "agent_profile": agent_profile,
+            "state": state,
+            "reset": True,
+        },
         timeout=30.0,
     )
 
@@ -118,7 +123,7 @@ async def cleanup_task_service(task_id: str):
         logger.warning("Cleanup failed for %s: %s", task_id, e)
 
 
-async def run_single_task(task_data: dict, tool_profile: dict | None = None) -> Dict[str, Any]:
+async def run_single_task(task_data: dict, agent_profile: dict | None = None) -> Dict[str, Any]:
     instance_id = task_data["instance_id"]
     db_name = task_data["selected_database"]
     logger.info("Starting task: %s (db: %s)", instance_id, db_name)
@@ -127,8 +132,8 @@ async def run_single_task(task_data: dict, tool_profile: dict | None = None) -> 
     try:
         await init_task_on_services(instance_id, task_data)
         initial_budget = calculate_initial_budget(task_data)
-        tool_profile = tool_profile or resolve_tool_profile("a-interact").as_dict()
-        await init_agent_session(instance_id, task_data, initial_budget, tool_profile)
+        agent_profile = agent_profile or resolve_agent_profile("a-interact").as_snapshot()
+        await init_agent_session(instance_id, task_data, initial_budget, agent_profile)
 
         initial_message = (
             f"Database: {db_name}\n"
@@ -175,9 +180,9 @@ async def run_evaluation(
     data_path: str,
     output_path: str,
     limit: int = None,
-    tool_profile: dict | None = None,
+    agent_profile: dict | None = None,
 ):
-    tool_profile = tool_profile or resolve_tool_profile("a-interact").as_dict()
+    agent_profile = agent_profile or resolve_agent_profile("a-interact").as_snapshot()
     tasks = []
     with open(data_path) as f:
         for line in f:
@@ -196,7 +201,7 @@ async def run_evaluation(
     for i, td in enumerate(tasks):
         logger.info("=== Task %d/%d: %s ===", i + 1, len(tasks), td["instance_id"])
         try:
-            r = await run_single_task(td, tool_profile)
+            r = await run_single_task(td, agent_profile)
             results.append(r)
             total_reward += r["total_reward"]
             if r["phase1_passed"]:
@@ -222,7 +227,10 @@ async def run_evaluation(
                     "phase2_count": p2_count,
                 },
                 "results": results,
-                "tool_profile": tool_profile,
+                "agent_profile": {
+                    "name": agent_profile["name"],
+                    "tools": list(agent_profile["tools"]),
+                },
             }
             with open(output_path, "w") as f:
                 json.dump(output, f, indent=2, default=str)
@@ -230,7 +238,15 @@ async def run_evaluation(
     if not tasks:
         with open(output_path, "w") as f:
             json.dump(
-                {"mode": "a-interact", "tool_profile": tool_profile, "metrics": {}, "results": []},
+                {
+                    "mode": "a-interact",
+                    "agent_profile": {
+                        "name": agent_profile["name"],
+                        "tools": list(agent_profile["tools"]),
+                    },
+                    "metrics": {},
+                    "results": [],
+                },
                 f,
                 indent=2,
                 default=str,
@@ -256,14 +272,14 @@ def main():
     parser.add_argument("--data", default=settings.data_path)
     parser.add_argument("--output", default="results/eval_ainteract.json")
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--tool-profile", default=None)
-    parser.add_argument("--tool-profiles-file", default=None)
+    parser.add_argument("--agent-profile", default=None)
+    parser.add_argument("--agent-profiles-file", default=None)
     args = parser.parse_args()
     try:
-        profile = resolve_tool_profile("a-interact", args.tool_profile, args.tool_profiles_file)
+        profile = resolve_agent_profile("a-interact", args.agent_profile, args.agent_profiles_file)
     except ValueError as exc:
         parser.error(str(exc))
-    asyncio.run(run_evaluation(args.data, args.output, args.limit, profile.as_dict()))
+    asyncio.run(run_evaluation(args.data, args.output, args.limit, profile.as_snapshot()))
 
 
 if __name__ == "__main__":

@@ -6,13 +6,17 @@ from shared.llm import _payload
 from system_agent.openwebui_runtime import OpenWebUIRuntime
 
 
+def _profile(name, tools, prompt=""):
+    return {"name": name, "tools": tools, "prompt_template": prompt}
+
+
 class _FakeClient:
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = []
 
     async def chat(self, messages, **kwargs):
-        self.calls.append(kwargs)
+        self.calls.append({"messages": messages, **kwargs})
         return self.responses.pop(0)
 
 
@@ -20,39 +24,94 @@ class OpenWebUIRuntimeTests(unittest.TestCase):
     def test_profile_controls_schema_and_reset_lifecycle(self):
         async def scenario():
             runtime = OpenWebUIRuntime()
+            first_profile = _profile("schema", ["get_schema"], "first")
+            other_profile = _profile("other", ["submit_sql"], "second")
             first = await runtime.init_session(
                 "task",
                 "a-interact",
-                state={"tool_profile": {"name": "schema", "tools": ["get_schema"]}},
+                state={"db_name": "db"},
+                agent_profile=first_profile,
             )
+            self.assertEqual(first["agent_profile"], {"name": "schema", "tools": ["get_schema"]})
+            session = runtime._sessions[("a-interact", "task")]
+            self.assertEqual(session.messages[0]["content"], "first")
+            self.assertEqual(session.state["agent_profile"], first["agent_profile"])
+            self.assertNotIn("prompt_template", session.state["agent_profile"])
+
             retained = await runtime.init_session(
                 "task",
                 "a-interact",
-                state={"tool_profile": {"name": "other", "tools": ["submit_sql"]}},
+                agent_profile=other_profile,
                 reset=False,
             )
-            self.assertEqual(retained["tool_profile"], first["tool_profile"])
+            self.assertEqual(retained["agent_profile"], first["agent_profile"])
 
             replaced = await runtime.init_session(
                 "task",
                 "a-interact",
-                state={"tool_profile": {"name": "other", "tools": ["submit_sql"]}},
+                agent_profile=other_profile,
                 reset=True,
             )
-            self.assertEqual(replaced["tool_profile"]["tools"], ["submit_sql"])
+            self.assertEqual(replaced["agent_profile"]["tools"], ["submit_sql"])
+            self.assertEqual(runtime._sessions[("a-interact", "task")].messages[0]["content"], "second")
             cleanup = await runtime.cleanup_session("task", "a-interact")
             self.assertEqual(cleanup["status"], "ok")
             self.assertNotIn(("a-interact", "task"), runtime._sessions)
 
         asyncio.run(scenario())
 
-    def test_selected_schemas_are_sent_in_profile_order_and_empty_is_empty(self):
+    def test_system_prompt_renders_state_and_tool_manifest_once(self):
+        async def scenario():
+            runtime = OpenWebUIRuntime()
+            profile = _profile(
+                "ordered",
+                ["submit_sql", "get_schema", "ask_user"],
+                "{{db_name}}|{{db_schema}}|{{external_kg}}|{{max_turn}}|{{available_tools}}",
+            )
+            await runtime.init_session(
+                "ordered",
+                "a-interact",
+                state={"db_name": "db", "db_schema": "schema", "external_kg": "kg", "max_turn": 4},
+                agent_profile=profile,
+            )
+            system_message = runtime._sessions[("a-interact", "ordered")].messages[0]["content"]
+            self.assertIn("db|schema|kg|4|", system_message)
+            self.assertIn("- submit_sql: 3 bird-coins", system_message)
+            self.assertIn("- get_schema: 1 bird-coin", system_message)
+            self.assertIn("- ask_user: 2 bird-coins", system_message)
+
+            runtime._sessions[("a-interact", "ordered")].state["db_name"] = "changed"
+            self.assertEqual(
+                runtime._sessions[("a-interact", "ordered")].messages[0]["content"],
+                system_message,
+            )
+
+        asyncio.run(scenario())
+
+    def test_missing_context_is_empty_and_empty_tools_manifest_is_empty(self):
+        async def scenario():
+            runtime = OpenWebUIRuntime()
+            await runtime.init_session(
+                "empty",
+                "a-interact",
+                agent_profile=_profile("empty", [], "A={{db_name}} B={{db_schema}} C={{external_kg}} D={{max_turn}} E[{{available_tools}}]"),
+            )
+            content = runtime._sessions[("a-interact", "empty")].messages[0]["content"]
+            self.assertEqual(content, "A= B= C= D= E[]")
+            fake = _FakeClient([{"content": "done"}])
+            with patch("system_agent.openwebui_runtime.get_client", return_value=fake):
+                await runtime.run_turn("empty", "a-interact", "hello")
+            self.assertEqual(fake.calls[0]["tools"], [])
+
+        asyncio.run(scenario())
+
+    def test_selected_schemas_are_sent_in_profile_order(self):
         async def scenario():
             runtime = OpenWebUIRuntime()
             await runtime.init_session(
                 "ordered",
                 "a-interact",
-                state={"tool_profile": {"name": "ordered", "tools": ["submit_sql", "get_schema"]}},
+                agent_profile=_profile("ordered", ["submit_sql", "get_schema"], ""),
             )
             fake = _FakeClient([{"content": "done"}])
             with patch("system_agent.openwebui_runtime.get_client", return_value=fake):
@@ -61,16 +120,6 @@ class OpenWebUIRuntimeTests(unittest.TestCase):
                 [item["function"]["name"] for item in fake.calls[0]["tools"]],
                 ["submit_sql", "get_schema"],
             )
-
-            await runtime.init_session(
-                "empty",
-                "a-interact",
-                state={"tool_profile": {"name": "empty", "tools": []}},
-            )
-            empty_fake = _FakeClient([{"content": "done"}])
-            with patch("system_agent.openwebui_runtime.get_client", return_value=empty_fake):
-                await runtime.run_turn("empty", "a-interact", "hello")
-            self.assertEqual(empty_fake.calls[0]["tools"], [])
 
         asyncio.run(scenario())
 
@@ -85,11 +134,8 @@ class OpenWebUIRuntimeTests(unittest.TestCase):
             await runtime.init_session(
                 "task",
                 "a-interact",
-                state={
-                    "tool_profile": {"name": "schema", "tools": ["get_schema"]},
-                    "budget_remaining": 3.0,
-                    "initial_budget": 3.0,
-                },
+                state={"budget_remaining": 3.0, "initial_budget": 3.0},
+                agent_profile=_profile("schema", ["get_schema"], ""),
             )
             session = runtime._sessions[("a-interact", "task")]
             with patch("system_agent.openwebui_runtime.execute_tool") as dispatch:
@@ -114,7 +160,7 @@ class OpenWebUIRuntimeTests(unittest.TestCase):
             await runtime.init_session(
                 "task",
                 "c-interact",
-                state={"tool_profile": {"name": "c", "tools": ["ask_user", "submit_sql"]}},
+                agent_profile=_profile("c", ["ask_user", "submit_sql"], ""),
             )
             session = runtime._sessions[("c-interact", "task")]
             with patch("system_agent.openwebui_runtime.execute_tool", return_value="submitted") as dispatch:

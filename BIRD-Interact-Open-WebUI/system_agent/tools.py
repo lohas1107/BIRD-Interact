@@ -310,11 +310,11 @@ def execute_tool(
         return f"UNKNOWN_TOOL: {name}"
 
     if allowed_tools is None:
-        profile = state.get("tool_profile")
+        profile = state.get("agent_profile")
         if isinstance(profile, dict) and "tools" in profile:
             allowed_tools = profile.get("tools") or []
     if allowed_tools is not None and name not in allowed_tools:
-        profile = state.get("tool_profile") or {}
+        profile = state.get("agent_profile") or {}
         profile_name = profile.get("name", "<unnamed>") if isinstance(profile, dict) else str(profile)
         state["_last_tool_dispatch_error"] = True
         return f"TOOL_NOT_ALLOWED: {name} is not enabled by profile {profile_name}"

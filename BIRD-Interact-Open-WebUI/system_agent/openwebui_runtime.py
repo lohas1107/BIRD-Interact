@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from shared.config import settings
 from shared.llm import get_client
-from shared.tool_profiles import resolve_session_tool_profile
+from shared.agent_profiles import AgentProfile, resolve_session_agent_profile
 from system_agent.agent import build_system_prompt
 from system_agent.tools import execute_tool, has_tool, schemas_for, tool_cost
 
@@ -26,6 +26,7 @@ class Session:
     mode: str
     session_id: str
     state: Dict[str, Any]
+    agent_profile: AgentProfile
     messages: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -50,10 +51,16 @@ class OpenWebUIRuntime:
     def _session_id(mode: str, task_id: str) -> str:
         return f"openwebui-{mode.replace('-', '_')}-{task_id}-{uuid.uuid4().hex[:8]}"
 
-    def _new_state(self, mode: str, state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _new_state(
+        self,
+        mode: str,
+        state: Optional[Dict[str, Any]],
+        agent_profile: AgentProfile,
+    ) -> Dict[str, Any]:
         result = dict(state or {})
-        profile = resolve_session_tool_profile(mode, result)
-        result["tool_profile"] = profile.as_dict()
+        # Persist only metadata.  The raw template remains private to the
+        # Session object and its first system message.
+        result["agent_profile"] = agent_profile.as_metadata()
         result.setdefault("mode", mode)
         result.setdefault("tool_trajectory", [])
         result.setdefault("dialogue_history", [])
@@ -69,13 +76,12 @@ class OpenWebUIRuntime:
 
     @staticmethod
     def _session_response(session: Session) -> Dict[str, Any]:
-        profile = session.state["tool_profile"]
         return {
             "task_id": session.task_id,
             "mode": session.mode,
             "session_id": session.session_id,
             "runtime": "openwebui",
-            "tool_profile": {"name": profile["name"], "tools": list(profile["tools"])},
+            "agent_profile": session.agent_profile.as_metadata(),
         }
 
     async def init_session(
@@ -84,6 +90,7 @@ class OpenWebUIRuntime:
         mode: str,
         state: Optional[Dict[str, Any]] = None,
         reset: bool = False,
+        agent_profile: Any = None,
     ) -> Dict[str, Any]:
         async with self._lock:
             key = (mode, task_id)
@@ -93,16 +100,18 @@ class OpenWebUIRuntime:
                 # particular, a new profile cannot mutate a live session.
                 return self._session_response(session)
 
-            session_state = self._new_state(mode, state)
+            profile = resolve_session_agent_profile(mode, agent_profile)
+            session_state = self._new_state(mode, state, profile)
             session = Session(
                 task_id=task_id,
                 mode=mode,
                 session_id=self._session_id(mode, task_id),
                 state=session_state,
+                agent_profile=profile,
                 messages=[
                     {
                         "role": "system",
-                        "content": build_system_prompt(mode, session_state),
+                        "content": build_system_prompt(profile, session_state),
                     }
                 ],
             )
@@ -173,9 +182,8 @@ class OpenWebUIRuntime:
     def _run_tool(self, session: Session, name: str, args: Dict[str, Any]) -> str:
         """Apply profile/turn controls, budget accounting, and dispatch."""
         session.state["_last_tool_is_error"] = False
-        profile = session.state.get("tool_profile")
-        allowed = tuple(profile.get("tools", ())) if isinstance(profile, dict) else None
-        profile_name = profile.get("name", "<unnamed>") if isinstance(profile, dict) else "<default>"
+        allowed = session.agent_profile.tools
+        profile_name = session.agent_profile.name
 
         # Check the registry before the profile.  A typo is UNKNOWN_TOOL even
         # when the profile is restrictive; a known but unselected tool is a
@@ -292,7 +300,7 @@ class OpenWebUIRuntime:
         response_text = ""
         last_tool_result = ""
         client = get_client()
-        profile_tools = tuple(session.state.get("tool_profile", {}).get("tools", ()))
+        profile_tools = session.agent_profile.tools
         tool_schemas = schemas_for(profile_tools)
 
         while True:

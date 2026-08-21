@@ -1,68 +1,93 @@
-"""Provider-neutral prompts and tool selection for the BIRD system agent."""
+"""Prompt rendering and profile-aware tool selection for the system agent."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
+
+from shared.agent_profiles import (
+    AgentProfile,
+    _validate_prompt_template,
+    normalize_agent_profile,
+    resolve_agent_profile,
+)
+from system_agent.tools import tool_cost
 
 
-CINTERACT_INSTRUCTION = """You are a data scientist with great PostgreSQL writing ability.
-You have a DB called "{db_name}".
-
-# DB Schema Info:
-{db_schema}
-
-# External Knowledge:
-{external_kg}
-
-# Instructions:
-You are tasked with generating PostgreSQL to solve the user's query. However, the query may be ambiguous. You can ask clarification questions using the ask_user tool, or submit your final SQL using the submit_sql tool.
-
-You have at most {max_turn} clarification turns. After that you must submit.
-
-Strategy:
-- Ask ONE clarification question at a time using ask_user.
-- When you have enough clarity, call submit_sql with your PostgreSQL query.
-- If a submission fails, analyze the error and try again.
-- After a successful Phase 1, you may receive a follow-up question for Phase 2.
-"""
-
-AINTERACT_INSTRUCTION = """You are a helpful PostgreSQL agent that interacts with a user and a database to solve the user's question.
-
-Your goal is to understand the user's ambiguous question involving external knowledge retrieval and generate the correct SQL query.
-You can interact with the user to ask clarification questions or submit SQL, and interact with the database environment to explore the database.
-
-The interaction ends when you submit the correct SQL query or the budget runs out. Each action costs bird-coins, so be efficient.
-
-Available tools and costs:
-- execute_sql: execute a PostgreSQL query. Cost: 1
-- get_schema: get the database schema. Cost: 1
-- get_all_column_meanings: get all column meanings. Cost: 1
-- get_column_meaning: get the meaning of one column. Cost: 0.5
-- get_all_external_knowledge_names: get all external knowledge names. Cost: 0.5
-- get_knowledge_definition: get one external knowledge definition. Cost: 0.5
-- get_all_knowledge_definitions: get all external knowledge definitions. Cost: 1
-- ask_user: ask the user a clarification question. Cost: 2
-- submit_sql: submit the SQL for evaluation. Cost: 3
-
-First explore the schema, column meanings, and relevant external knowledge. Ask one clarification question at a time. Test SQL with execute_sql when useful. Track the remaining budget and submit the best SQL before the budget is exhausted.
-"""
+def _cost_text(cost: float) -> str:
+    if float(cost).is_integer():
+        number = str(int(cost))
+    else:
+        number = str(cost).rstrip("0").rstrip(".")
+    unit = "bird-coin" if cost == 1 else "bird-coins"
+    return f"{number} {unit}"
 
 
-def build_system_prompt(mode: str, state: Dict[str, Any]) -> str:
-    if mode == "c-interact":
-        return CINTERACT_INSTRUCTION.format(
-            db_name=state.get("db_name", "unknown"),
-            db_schema=state.get("db_schema", ""),
-            external_kg=state.get("external_kg", ""),
-            max_turn=state.get("max_turn", 0),
+def available_tools_text(tools: List[str] | tuple[str, ...]) -> str:
+    """Render an ordered tool manifest for the ``available_tools`` field."""
+    return "\n".join(f"- {name}: {_cost_text(tool_cost(name))}" for name in tools)
+
+
+def render_system_prompt(agent_profile: AgentProfile | Mapping[str, Any], state: Mapping[str, Any]) -> str:
+    """Render the complete system prompt from one resolved profile template.
+
+    Runtime context is only substituted when the profile template asks for
+    it.  No mode-specific prompt or implicit context is appended here.
+    """
+    if isinstance(agent_profile, AgentProfile):
+        profile = AgentProfile(
+            agent_profile.name,
+            agent_profile.tools,
+            _validate_prompt_template(
+                agent_profile.name,
+                agent_profile.prompt_template,
+                "prompt_template",
+            ),
+            agent_profile.prompt_file,
         )
-    return AINTERACT_INSTRUCTION
+    else:
+        # A dictionary passed here must be a complete snapshot.  Validation is
+        # repeated at this boundary so an unresolved template can never reach
+        # the model even if this helper is used outside the HTTP runtime.
+        profile = normalize_agent_profile(str(state.get("mode", "")), dict(agent_profile))
+
+    values = {
+        "db_name": state.get("db_name", ""),
+        "db_schema": state.get("db_schema", ""),
+        "external_kg": state.get("external_kg", ""),
+        "max_turn": state.get("max_turn", ""),
+        "available_tools": available_tools_text(profile.tools),
+    }
+
+    import re
+
+    placeholder_re = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+    def replace(match: re.Match[str]) -> str:
+        name = match.group(1)
+        if name not in values:
+            # This should already have been rejected by profile validation;
+            # keep rendering fail-closed for callers that construct profiles
+            # directly.
+            raise ValueError(f"unknown prompt placeholder {name!r}")
+        value = values[name]
+        return "" if value is None else str(value)
+
+    return placeholder_re.sub(replace, profile.prompt_template)
+
+
+# Descriptive alias for callers that want to emphasize the template flow.
+render_agent_prompt = render_system_prompt
+render_prompt = render_system_prompt
+format_available_tools = available_tools_text
+
+
+def build_system_prompt(agent_profile: AgentProfile | Mapping[str, Any], state: Dict[str, Any]) -> str:
+    """Compatibility name used by the Open WebUI runtime."""
+    return render_system_prompt(agent_profile, state)
 
 
 def tool_names_for_mode(mode: str, state: Dict[str, Any] | None = None) -> List[str]:
-    """Return the session profile's ordered tools, with mode fallback."""
-    if state and isinstance(state.get("tool_profile"), dict):
-        return list(state["tool_profile"].get("tools", ()))
-    from shared.tool_profiles import resolve_tool_profile
-
-    return list(resolve_tool_profile(mode).tools)
+    """Return the session profile's ordered tools, with configured fallback."""
+    if state and isinstance(state.get("agent_profile"), dict):
+        return list(state["agent_profile"].get("tools", ()))
+    return list(resolve_agent_profile(mode).tools)

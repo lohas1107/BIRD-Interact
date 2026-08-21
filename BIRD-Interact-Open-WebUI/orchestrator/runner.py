@@ -14,7 +14,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from shared.config import settings
-from shared.tool_profiles import resolve_tool_profile
+from shared.agent_profiles import resolve_agent_profile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ async def run_parallel_evaluation(
     output_path: str,
     concurrency: int = 5,
     mode: str = "a-interact",
-    tool_profile: dict | None = None,
+    agent_profile: dict | None = None,
 ):
     semaphore = asyncio.Semaphore(concurrency)
     results: List[Dict[str, Any]] = []
@@ -52,8 +52,11 @@ async def run_parallel_evaluation(
             },
             "results": results,
         }
-        if tool_profile is not None:
-            output["tool_profile"] = tool_profile
+        if agent_profile is not None:
+            output["agent_profile"] = {
+                "name": agent_profile["name"],
+                "tools": list(agent_profile["tools"]),
+            }
         with open(output_path, "w") as f:
             json.dump(output, f, indent=2, default=str)
 
@@ -175,14 +178,14 @@ def main():
     parser.add_argument("--output", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--concurrency", type=int, default=5)
-    parser.add_argument("--tool-profile", default=None)
-    parser.add_argument("--tool-profiles-file", default=None)
+    parser.add_argument("--agent-profile", default=None)
+    parser.add_argument("--agent-profiles-file", default=None)
     args = parser.parse_args()
 
     if args.mode == "oracle" and (
-        args.tool_profile is not None or args.tool_profiles_file is not None
+        args.agent_profile is not None or args.agent_profiles_file is not None
     ):
-        parser.error("oracle mode does not support --tool-profile or --tool-profiles-file")
+        parser.error("oracle mode does not support --agent-profile or --agent-profiles-file")
 
     output = args.output or f"results/eval_{args.mode.replace('-', '_')}.json"
 
@@ -192,12 +195,12 @@ def main():
             profile = None
         elif args.mode == "a-interact":
             from orchestrator.ainteract import run_single_task
-            profile = resolve_tool_profile(args.mode, args.tool_profile, args.tool_profiles_file)
-            run_single_task = partial(run_single_task, tool_profile=profile.as_dict())
+            profile = resolve_agent_profile(args.mode, args.agent_profile, args.agent_profiles_file)
+            run_single_task = partial(run_single_task, agent_profile=profile.as_snapshot())
         else:
             from orchestrator.cinteract import run_single_task
-            profile = resolve_tool_profile(args.mode, args.tool_profile, args.tool_profiles_file)
-            run_single_task = partial(run_single_task, tool_profile=profile.as_dict())
+            profile = resolve_agent_profile(args.mode, args.agent_profile, args.agent_profiles_file)
+            run_single_task = partial(run_single_task, agent_profile=profile.as_snapshot())
     except ValueError as exc:
         # Resolve before loading task data so an invalid CLI profile cannot
         # start an evaluation or touch task state.
@@ -212,7 +215,7 @@ def main():
         output_path=output,
         concurrency=args.concurrency,
         mode=args.mode,
-        tool_profile=profile.as_dict() if profile else None,
+        agent_profile=profile.as_metadata() if profile else None,
     ))
 
 

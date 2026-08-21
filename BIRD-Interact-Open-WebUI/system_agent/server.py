@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from shared.config import settings
-from shared.tool_profiles import InvalidToolProfile
+from shared.agent_profiles import InvalidAgentProfile
 from system_agent.openwebui_runtime import OpenWebUIRuntime
 
 logger = logging.getLogger(__name__)
@@ -33,9 +33,9 @@ class SessionInitRequest(BaseModel):
     mode: str = "a-interact"
     state: Dict[str, Any] = Field(default_factory=dict)
     reset: bool = True
-    # Optional convenience for direct API callers.  The evaluation CLI still
-    # carries the resolved snapshot in state.tool_profile.
-    tool_profile: Optional[Any] = None
+    # The runner sends a complete resolved snapshot.  If omitted, the service
+    # resolves the configured default for the request mode.
+    agent_profile: Optional[Any] = None
 
 
 class SessionRunRequest(BaseModel):
@@ -56,25 +56,23 @@ async def init_session(req: SessionInitRequest):
     """Initialize a local BIRD session backed by Open WebUI."""
     if not runtime.available:
         raise HTTPException(status_code=503, detail=f"Open WebUI runtime unavailable: {runtime.error}")
-    state = dict(req.state)
-    if req.tool_profile is not None and "tool_profile" not in state:
-        state["tool_profile"] = req.tool_profile
     try:
         return await runtime.init_session(
             task_id=req.task_id,
             mode=req.mode,
-            state=state,
+            state=dict(req.state),
             reset=req.reset,
+            agent_profile=req.agent_profile,
         )
-    except InvalidToolProfile as exc:
+    except InvalidAgentProfile as exc:
         raise HTTPException(status_code=400, detail=exc.as_detail()) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail={
-                "code": "INVALID_TOOL_PROFILE",
-                "profile": state.get("tool_profile"),
-                "tool": None,
+                "code": "INVALID_AGENT_PROFILE",
+                "profile": req.agent_profile,
+                "field": "agent_profile",
                 "message": str(exc),
             },
         ) from exc

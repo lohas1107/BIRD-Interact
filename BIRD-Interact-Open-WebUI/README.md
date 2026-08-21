@@ -30,7 +30,7 @@ Open WebUI (Docker :3000)
 
 - **Modular microservices** — three independent services communicating via HTTP. Deploy on different machines, swap any component (bring your own agent, user simulator, or DB backend), or scale services independently.
 - **Extensible & research-friendly** — each service can be developed, tested, and replaced independently. Easy to plug in a new agent scaffold, experiment with different user simulation strategies, or adapt the evaluation environment for new tasks.
-- **Unified local runtime** — both c-interact and a-interact use the same Open WebUI client with different tool sets
+- **Unified local runtime** — both c-interact and a-interact use the same Open WebUI client and resolved agent profiles
 - **Parallel execution** — `asyncio.Semaphore` + per-task DB copies for lock-free concurrency
 - **OpenAI-compatible LLM** — routes both BIRD LLM services through Open WebUI to a local vLLM model
 - **Per-task DB isolation** — each task gets its own database copy; SELECT-only enforcement for execute; Phase 1 snapshots for Phase 2
@@ -113,6 +113,10 @@ python -m orchestrator.runner --mode oracle --concurrency 5
 # Specific tasks
 python -m orchestrator.runner --mode a-interact --limit 10
 
+# Select a profile or an alternate profile configuration
+python -m orchestrator.runner --mode a-interact --agent-profile a-interact-schema
+python -m orchestrator.runner --mode c-interact --agent-profiles-file /path/to/agent_profiles.json
+
 # Full dataset
 DATASET=full python -m orchestrator.runner --mode a-interact --concurrency 3
 ```
@@ -139,6 +143,29 @@ OPENAI_API_KEYS=
 SYSTEM_AGENT_MODEL=google/gemma-4-31B-it
 USER_SIMULATOR_MODEL=google/gemma-4-31B-it
 ```
+
+## Agent profiles
+
+Profiles are defined in [`config/agent_profiles.json`](config/agent_profiles.json). Each profile has an ordered `tools` list and a required `prompt_file`; profiles do not contain model, temperature, token, mode, or version settings.
+
+Prompt files are UTF-8 Markdown files relative to the configuration file. They may use `{{db_name}}`, `{{db_schema}}`, `{{external_kg}}`, `{{max_turn}}`, and the optional `{{available_tools}}` placeholder. The tool manifest preserves profile order and includes each registry tool's bird-coin cost. A profile is resolved once when an evaluation starts, then its complete prompt snapshot is sent to each task session. Session state and evaluation output retain only the profile `name` and `tools`, never the prompt text.
+
+The system-agent API accepts the same snapshot at the top level of `/init_session`:
+
+```json
+{
+  "task_id": "task-1",
+  "mode": "a-interact",
+  "agent_profile": {
+    "name": "a-interact-default",
+    "tools": ["ask_user", "get_schema"],
+    "prompt_template": "..."
+  },
+  "state": {}
+}
+```
+
+If `agent_profile` is omitted, the service resolves the mode's `defaults` entry. A custom snapshot must include `name`, `tools`, and `prompt_template`. Use `reset: true` to replace the profile of an existing session; `reset: false` keeps the current session profile.
 
 ## Dataset
 
@@ -179,7 +206,7 @@ Set `DATASET=lite` or `DATASET=full` in `.env`.
 ```
 .
 ├── system_agent/           # Open WebUI agent service (port 6000)
-│   ├── agent.py            # Prompts and mode-specific tool selection
+│   ├── agent.py            # Profile prompt rendering and tool manifests
 │   ├── server.py           # FastAPI endpoints
 │   ├── openwebui_runtime.py  # Session, tool loop, budget, phase management
 │   └── tools.py            # OpenAI-compatible BIRD tool schemas
@@ -190,6 +217,7 @@ Set `DATASET=lite` or `DATASET=full` in `.env`.
 │   ├── prompts.py          # Prompt templates
 │   └── sql_parser.py       # SQL segmentation
 ├── shared/                 # Shared utilities
+│   ├── agent_profiles.py   # Profile schema, validation, and resolution
 │   ├── config.py           # Centralized settings
 │   ├── llm.py              # Open WebUI backend client
 │   ├── db_utils.py         # PostgreSQL pooling & evaluation
@@ -200,6 +228,9 @@ Set `DATASET=lite` or `DATASET=full` in `.env`.
 │   ├── ainteract.py        # a-interact pipeline
 │   ├── report.py           # HTML report generator
 │   └── test_harness.py     # Endpoint validation (no LLM)
+├── config/
+│   ├── agent_profiles.json  # Profile defaults and tool selections
+│   └── prompts/              # UTF-8 system prompt templates
 ├── bird-interact-lite/     # Lite dataset (300 tasks)
 ├── bird-interact-full/     # Full dataset (600 tasks)
 ├── docker-compose.yml      # PostgreSQL containers
@@ -212,7 +243,7 @@ Set `DATASET=lite` or `DATASET=full` in `.env`.
 
 ### a-interact (Agentic Interaction)
 
-The agent autonomously decides which tools to use within a budget. Tools: `execute_sql`, `get_schema`, `get_column_meaning`, `get_knowledge_definition`, `ask_user`, `submit_sql`, etc.
+The agent autonomously decides which tools to use within a budget. The selected profile controls the ordered schemas exposed to the model; the default a-interact profile includes `execute_sql`, `get_schema`, `get_column_meaning`, `get_knowledge_definition`, `ask_user`, `submit_sql`, etc.
 
 Budget formula: `6 + 2 * num_ambiguities + 2 * patience`
 
