@@ -148,7 +148,7 @@ USER_SIMULATOR_MODEL=google/gemma-4-31B-it
 
 Profiles are defined in [`config/agent_profiles.json`](config/agent_profiles.json). Each profile has an ordered `tools` list and a required `prompt_file`; profiles do not contain model, temperature, token, mode, or version settings.
 
-Prompt files are UTF-8 Markdown files relative to the configuration file. They may use `{{db_name}}`, `{{db_schema}}`, `{{external_kg}}`, `{{max_turn}}`, and the optional `{{available_tools}}` placeholder. The tool manifest preserves profile order and includes each registry tool's bird-coin cost. A profile is resolved once when an evaluation starts, then its complete prompt snapshot is sent to each task session. Session state and evaluation output retain only the profile `name` and `tools`, never the prompt text.
+Prompt files are UTF-8 Markdown files relative to the configuration file. They may use `{{db_name}}`, `{{db_schema}}`, `{{external_kg}}`, `{{max_turn}}`, and the optional `{{available_tools}}` placeholder. The tool manifest uses the original prompt wording and ordering. A profile is resolved once when an evaluation starts, then its complete prompt snapshot is sent to each task session. Session state and evaluation output retain only the profile `name` and `tools`, never the prompt text.
 
 The system-agent API accepts the same snapshot at the top level of `/init_session`:
 

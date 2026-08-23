@@ -76,9 +76,9 @@ class OpenWebUIRuntimeTests(unittest.TestCase):
             )
             system_message = runtime._sessions[("a-interact", "ordered")].messages[0]["content"]
             self.assertIn("db|schema|kg|4|", system_message)
-            self.assertIn("- submit_sql: 3 bird-coins", system_message)
-            self.assertIn("- get_schema: 1 bird-coin", system_message)
-            self.assertIn("- ask_user: 2 bird-coins", system_message)
+            self.assertIn("- submit_sql: submit the SQL for evaluation. Cost: 3", system_message)
+            self.assertIn("- get_schema: get the database schema. Cost: 1", system_message)
+            self.assertIn("- ask_user: ask the user a clarification question. Cost: 2", system_message)
 
             runtime._sessions[("a-interact", "ordered")].state["db_name"] = "changed"
             self.assertEqual(

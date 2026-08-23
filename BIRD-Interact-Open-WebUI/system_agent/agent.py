@@ -10,21 +10,41 @@ from shared.agent_profiles import (
     normalize_agent_profile,
     resolve_agent_profile,
 )
-from system_agent.tools import tool_cost
 
 
-def _cost_text(cost: float) -> str:
-    if float(cost).is_integer():
-        number = str(int(cost))
-    else:
-        number = str(cost).rstrip("0").rstrip(".")
-    unit = "bird-coin" if cost == 1 else "bird-coins"
-    return f"{number} {unit}"
+_TOOL_PROMPT_ORDER = (
+    "execute_sql",
+    "get_schema",
+    "get_all_column_meanings",
+    "get_column_meaning",
+    "get_all_external_knowledge_names",
+    "get_knowledge_definition",
+    "get_all_knowledge_definitions",
+    "ask_user",
+    "submit_sql",
+)
+
+_TOOL_PROMPT_TEXT = {
+    "execute_sql": "execute a PostgreSQL query. Cost: 1",
+    "get_schema": "get the database schema. Cost: 1",
+    "get_all_column_meanings": "get all column meanings. Cost: 1",
+    "get_column_meaning": "get the meaning of one column. Cost: 0.5",
+    "get_all_external_knowledge_names": "get all external knowledge names. Cost: 0.5",
+    "get_knowledge_definition": "get one external knowledge definition. Cost: 0.5",
+    "get_all_knowledge_definitions": "get all external knowledge definitions. Cost: 1",
+    "ask_user": "ask the user a clarification question. Cost: 2",
+    "submit_sql": "submit the SQL for evaluation. Cost: 3",
+}
 
 
 def available_tools_text(tools: List[str] | tuple[str, ...]) -> str:
-    """Render an ordered tool manifest for the ``available_tools`` field."""
-    return "\n".join(f"- {name}: {_cost_text(tool_cost(name))}" for name in tools)
+    """Render the available-tools manifest in the original prompt wording."""
+    selected = set(tools)
+    return "\n".join(
+        f"- {name}: {_TOOL_PROMPT_TEXT[name]}"
+        for name in _TOOL_PROMPT_ORDER
+        if name in selected
+    )
 
 
 def render_system_prompt(agent_profile: AgentProfile | Mapping[str, Any], state: Mapping[str, Any]) -> str:
