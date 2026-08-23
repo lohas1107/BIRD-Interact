@@ -52,7 +52,7 @@
       ]
     },
     "raw-3": {
-      "prompt_file": "prompts/a-interact-default.md",
+      "prompt_file": "prompts/raw-3.md",
       "tools": [
         "ask_user",
         "get_schema",
