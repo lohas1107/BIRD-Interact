@@ -43,7 +43,21 @@ class AgentProfileTests(unittest.TestCase):
             ),
         )
         self.assertEqual(c_profile.tools, ("ask_user", "submit_sql"))
-        self.assertEqual(set(a_profile.tools), set(VALID_TOOLS))
+        self.assertEqual(
+            set(a_profile.tools),
+            set(VALID_TOOLS) - {"search_semantic_context", "get_knowledge", "get_table_schema"},
+        )
+        self.assertEqual(
+            resolve_agent_profile("a-interact", "kg-v1").tools,
+            (
+                "ask_user",
+                "search_semantic_context",
+                "get_knowledge",
+                "get_table_schema",
+                "execute_sql",
+                "submit_sql",
+            ),
+        )
         self.assertIn("{{db_name}}", c_profile.prompt_template)
 
     def test_custom_profiles_allow_empty_prompt_and_cross_mode_tools(self):

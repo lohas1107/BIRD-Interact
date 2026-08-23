@@ -16,14 +16,14 @@ reset.cypher (isolated instance only)
 `reset.cypher` is destructive and must not be run against a shared or existing
 database. Use a temporary Neo4j instance or namespace for validation.
 
-For an isolated Neo4j instance, start Neo4j with Compose and start the local
-application/embedding services from `BIRD-Interact-Claude`:
+For an isolated Neo4j instance, start Neo4j with the Open WebUI Compose
+profile and start the optional local embedding service from
+`BIRD-Interact-Open-WebUI`:
 
 ```bash
 docker compose --profile kg up -d neo4j
-bash scripts/start_services.sh
-python knowledge-graph/20160814/generate_mapping.py
-python knowledge-graph/20160814/import_embeddings.py
+KG_ENABLED=1 bash BIRD-Interact-Open-WebUI/scripts/start_services.sh
+bash BIRD-Interact-Open-WebUI/scripts/provision_kg.sh
 ```
 
 Run the generated Cypher files against that isolated Neo4j instance in the
@@ -108,13 +108,14 @@ reads all `SemanticSearch` documents, batches them through this endpoint and
 updates the Neo4j nodes. Documents are sent without a query instruction.
 
 For semantic queries the search repository sends the raw query text to the same
-gateway. Set `OPENAI_API_KEY` before running `scripts/start_services.sh`.
+gateway. Set the independent `EMBEDDING_API_KEY` (and, when needed,
+`EMBEDDING_API_BASE_URL`) before running `scripts/start_services.sh`.
 
 ## `search_semantic_context`
 
-The DB service route is `POST /search/semantic_context`. The Claude-facing tool
-does not expose `task_id` or `database_name`; the service obtains the selected
-database from task context.
+The DB service route is `POST /search/semantic_context`. The agent-facing tool
+does not expose `task_id`; the service obtains the selected database from task
+context.
 
 Request:
 
@@ -226,12 +227,13 @@ Request:
 `hops` is 1–10 and `paths` is 1–20; both default to 5. `join_paths` appears
 only when `to_table` is supplied. This tool does not return Knowledge.
 
-## Claude integration
+## Open WebUI integration
 
-The new graph profile can be run with:
+The opt-in graph profile can be run from the Open WebUI project with:
 
 ```bash
-python -m orchestrator.runner --mode a-interact --tool-profile kg-v1
+python -m orchestrator.runner --mode a-interact --agent-profile kg-v1
+python -m orchestrator.runner --mode c-interact --agent-profile kg-v1
 ```
 
 The `kg-v1` tools and costs are:
@@ -246,4 +248,4 @@ The `kg-v1` tools and costs are:
 | `submit_sql` | 3.0 |
 
 Legacy semantic functions remain in the codebase but are not registered in
-`kg-v1`. The ADK runtime is intentionally unchanged.
+`kg-v1`. The existing Open WebUI runtime and result metadata remain unchanged.

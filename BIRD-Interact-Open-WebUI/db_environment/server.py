@@ -18,8 +18,15 @@ from shared.db_utils import (
 )
 from shared.models import (
     ExecuteSQLRequest, ExecuteSQLResponse, InitTaskRequest,
-    SchemaRequest, ColumnMeaningRequest, KnowledgeRequest,
+    SchemaRequest, TableSchemaRequest, KnowledgeGraphRequest,
+    SearchSemanticContextRequest, ColumnMeaningRequest, KnowledgeRequest,
     SubmitSQLRequest, SubmitSQLResponse,
+)
+from db_environment.knowledge_graph import (
+    GraphSchemaError,
+    Neo4jKnowledgeRepository,
+    Neo4jSchemaRepository,
+    SemanticSearchRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,6 +41,9 @@ _column_meanings_cache: Dict[str, Dict] = {}
 _external_knowledge_cache: Dict[str, Dict] = {}
 _submit_attempts: Dict[str, Dict[int, int]] = {}
 _successful_phase1_sql: Dict[str, str] = {}
+_knowledge_graph = Neo4jSchemaRepository(settings)
+_knowledge_repository = Neo4jKnowledgeRepository(settings)
+_semantic_search = SemanticSearchRepository(settings)
 
 
 def _load_db_data(db_name: str):
@@ -81,6 +91,26 @@ def _filter_knowledge(db_name: str, record: Dict) -> Dict:
         to_remove = [k for k, v in agent_kb.items() if v.get("id") in deleted_ids]
         for k in to_remove: del agent_kb[k]
     return agent_kb
+
+
+def _masked_knowledge_ids(db_name: str, record: Dict) -> set[str]:
+    """Return task-hidden IDs in the same namespace used by the graph API."""
+    masked: set[str] = set()
+    for ambiguity in record.get("knowledge_ambiguity", []):
+        if not isinstance(ambiguity, dict):
+            continue
+        deleted = ambiguity.get("deleted_knowledge")
+        if isinstance(deleted, bool):
+            continue
+        if isinstance(deleted, int) and deleted >= 0:
+            masked.add(f"{db_name.casefold()}:{deleted}")
+        elif isinstance(deleted, str):
+            value = deleted.strip()
+            if value.isdigit():
+                masked.add(f"{db_name.casefold()}:{int(value)}")
+            elif value:
+                masked.add(value)
+    return masked
 
 
 def _format_result(result, cursor_desc=None) -> str:
@@ -335,6 +365,71 @@ async def get_schema(req: SchemaRequest):
     return {"schema": _schema_cache.get(db_name, "Schema not available")}
 
 
+def _graph_error(exc: GraphSchemaError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={"code": exc.code, "message": exc.message},
+    )
+
+
+@app.post("/table_schema")
+@app.post("/get_table_schema")
+async def get_table_schema(req: TableSchemaRequest):
+    """Read physical schema graph scoped to the task's selected database."""
+    td = _task_data.get(req.task_id)
+    if not td:
+        raise HTTPException(404, f"Task {req.task_id} not initialized")
+    selected_database = str(td.get("selected_database", "")).casefold()
+    if req.database_name.strip().casefold() != selected_database:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INVALID_REQUEST",
+                "message": "database_name must match the task selected database",
+            },
+        )
+    try:
+        return await asyncio.to_thread(_knowledge_graph.get_table_schema, req)
+    except GraphSchemaError as exc:
+        raise _graph_error(exc) from exc
+
+
+@app.post("/search/semantic_context")
+async def search_semantic_context(req: SearchSemanticContextRequest):
+    """Search task-visible Knowledge and physical-schema context."""
+    td = _task_data.get(req.task_id)
+    if not td:
+        raise HTTPException(404, f"Task {req.task_id} not initialized")
+    db_name = str(td.get("selected_database", "")).casefold()
+    try:
+        return await asyncio.to_thread(
+            _semantic_search.search,
+            req,
+            db_name,
+            _masked_knowledge_ids(db_name, td),
+        )
+    except GraphSchemaError as exc:
+        raise _graph_error(exc) from exc
+
+
+@app.post("/knowledge/graph")
+async def get_knowledge_graph(req: KnowledgeGraphRequest):
+    """Read the global-ID Knowledge graph with task-scoped masking."""
+    td = _task_data.get(req.task_id)
+    if not td:
+        raise HTTPException(404, f"Task {req.task_id} not initialized")
+    db_name = str(td.get("selected_database", "")).casefold()
+    try:
+        return await asyncio.to_thread(
+            _knowledge_repository.get_knowledge,
+            req,
+            _masked_knowledge_ids(db_name, td),
+            db_name,
+        )
+    except GraphSchemaError as exc:
+        raise _graph_error(exc) from exc
+
+
 @app.post("/all_column_meanings")
 async def get_all_column_meanings(req: SchemaRequest):
     td = _task_data.get(req.task_id)
@@ -413,6 +508,15 @@ async def cleanup_task(req: SchemaRequest):
 @app.get("/health")
 async def health():
     return {"status": "healthy", "service": "db_environment"}
+
+
+@app.on_event("shutdown")
+async def close_knowledge_graph():
+    await asyncio.gather(
+        asyncio.to_thread(_knowledge_graph.close),
+        asyncio.to_thread(_knowledge_repository.close),
+        asyncio.to_thread(_semantic_search.close),
+    )
 
 
 if __name__ == "__main__":

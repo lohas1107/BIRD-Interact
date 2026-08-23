@@ -13,6 +13,10 @@ from shared.agent_profiles import (
 
 
 _TOOL_PROMPT_ORDER = (
+    "ask_user",
+    "search_semantic_context",
+    "get_knowledge",
+    "get_table_schema",
     "execute_sql",
     "get_schema",
     "get_all_column_meanings",
@@ -20,11 +24,13 @@ _TOOL_PROMPT_ORDER = (
     "get_all_external_knowledge_names",
     "get_knowledge_definition",
     "get_all_knowledge_definitions",
-    "ask_user",
     "submit_sql",
 )
 
 _TOOL_PROMPT_TEXT = {
+    "search_semantic_context": "search candidate Knowledge and table-schema context. Cost: 2",
+    "get_knowledge": "get an authoritative Knowledge definition and dependencies. Cost: 0.5",
+    "get_table_schema": "get targeted table schema, constraints, and join paths. Cost: 0.5",
     "execute_sql": "execute a PostgreSQL query. Cost: 1",
     "get_schema": "get the database schema. Cost: 1",
     "get_all_column_meanings": "get all column meanings. Cost: 1",
@@ -38,12 +44,11 @@ _TOOL_PROMPT_TEXT = {
 
 
 def available_tools_text(tools: List[str] | tuple[str, ...]) -> str:
-    """Render the available-tools manifest in the original prompt wording."""
-    selected = set(tools)
+    """Render the selected tool manifest in the profile's declared order."""
     return "\n".join(
         f"- {name}: {_TOOL_PROMPT_TEXT[name]}"
-        for name in _TOOL_PROMPT_ORDER
-        if name in selected
+        for name in tools
+        if name in _TOOL_PROMPT_TEXT
     )
 
 

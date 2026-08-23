@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 
@@ -605,7 +606,14 @@ def emit(source_root: Path, output: Path) -> dict[str, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    default_source = Path(__file__).resolve().parents[2] / "BIRD-Interact-Claude" / "bird-interact-lite"
+    workspace_root = Path(__file__).resolve().parents[2]
+    dataset = os.environ.get("DATASET", "lite")
+    default_source = Path(
+        os.environ.get(
+            "DATASET_ROOT",
+            str(workspace_root / "BIRD-Interact-Open-WebUI" / f"bird-interact-{dataset}"),
+        )
+    )
     parser.add_argument("--source", type=Path, default=default_source)
     parser.add_argument("--output", type=Path, default=Path(__file__).with_name("mapping.cypher"))
     args = parser.parse_args()

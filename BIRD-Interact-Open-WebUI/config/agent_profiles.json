@@ -58,6 +58,17 @@
         "get_schema",
         "submit_sql"
       ]
+    },
+    "kg-v1": {
+      "prompt_file": "prompts/kg-v1.md",
+      "tools": [
+        "ask_user",
+        "search_semantic_context",
+        "get_knowledge",
+        "get_table_schema",
+        "execute_sql",
+        "submit_sql"
+      ]
     }
   }
 }

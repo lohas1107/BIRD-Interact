@@ -40,6 +40,23 @@ class Settings(BaseSettings):
     user_sim_port: int = 6001
     db_env_port: int = 6002
 
+    # Optional kg-v1 embedding gateway.  The gateway is only started when
+    # KG_ENABLED=1; keeping these settings here lets the DB service fail
+    # closed without changing the legacy startup path.
+    embedding_service_port: int = 6003
+    embedding_service_url: str = "http://127.0.0.1:6003"
+    embedding_api_base_url: str = "https://api.openai.com/v1"
+    embedding_api_key: str = ""
+    embedding_timeout: float = 60.0
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+
+    # Optional kg-v1 Neo4j physical-schema and Knowledge graph.
+    neo4j_uri: str = "bolt://127.0.0.1:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "bird-interact-dev"
+    neo4j_database: str = "neo4j"
+
     # Models exposed by the configured Open WebUI provider
     system_agent_model: str = "google/gemma-4-31B-it"
     user_simulator_model: str = "google/gemma-4-31B-it"

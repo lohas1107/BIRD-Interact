@@ -53,7 +53,7 @@ class ApiCliEvaluationTests(unittest.TestCase):
                 await server.init_session(
                     server.SessionInitRequest(
                         task_id="api-invalid",
-                        agent_profile=_profile(tools=["search_semantic_context"]),
+                    agent_profile=_profile(tools=["not_a_graph_tool"]),
                     )
                 )
             exc = raised.exception
@@ -64,7 +64,7 @@ class ApiCliEvaluationTests(unittest.TestCase):
                     "code": "INVALID_AGENT_PROFILE",
                     "profile": "custom",
                     "field": "tools",
-                    "message": "unknown tool 'search_semantic_context'",
+                    "message": "unknown tool 'not_a_graph_tool'",
                 },
             )
 

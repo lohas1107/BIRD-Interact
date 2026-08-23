@@ -89,6 +89,20 @@ docker compose up -d open-webui postgresql
 bash scripts/start_services.sh
 ```
 
+The Neo4j-backed `kg-v1` profile is opt-in. Configure an embedding credential
+and endpoint separately from the chat-model settings, start the Compose `kg`
+profile and provision the graph from the selected dataset:
+
+```bash
+docker compose --profile kg up -d neo4j
+EMBEDDING_API_BASE_URL=https://api.openai.com/v1 \
+EMBEDDING_API_KEY=... KG_ENABLED=1 bash scripts/start_services.sh
+DATASET=lite bash scripts/provision_kg.sh
+```
+
+`DATASET=full` selects `bird-interact-full`. Provisioning is rerunnable and
+does not reset Neo4j unless `RESET_KG=1` is explicitly supplied.
+
 Create the first Open WebUI account through `http://127.0.0.1:3000`, then create an Open WebUI API key from the account settings and put it in `.env` as `OPEN_WEBUI_API_KEY`. The key authenticates the BIRD services; the upstream vLLM server does not require a provider API key.
 
 Verify the complete model path:
@@ -115,6 +129,8 @@ python -m orchestrator.runner --mode a-interact --limit 10
 
 # Select a profile or an alternate profile configuration
 python -m orchestrator.runner --mode a-interact --agent-profile a-interact-schema
+python -m orchestrator.runner --mode a-interact --agent-profile kg-v1
+python -m orchestrator.runner --mode c-interact --agent-profile kg-v1
 python -m orchestrator.runner --mode c-interact --agent-profiles-file /path/to/agent_profiles.json
 
 # Full dataset
@@ -142,6 +158,16 @@ OPENAI_API_BASE_URLS=http://192.168.1.233:8000/v1
 OPENAI_API_KEYS=
 SYSTEM_AGENT_MODEL=google/gemma-4-31B-it
 USER_SIMULATOR_MODEL=google/gemma-4-31B-it
+
+# Optional kg-v1 embedding upstream; intentionally independent from chat.
+EMBEDDING_API_BASE_URL=https://api.openai.com/v1
+EMBEDDING_API_KEY=
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+NEO4J_URI=bolt://127.0.0.1:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=bird-interact-dev
+NEO4J_DATABASE=neo4j
 ```
 
 ## Agent profiles
@@ -211,7 +237,9 @@ Set `DATASET=lite` or `DATASET=full` in `.env`.
 │   ├── openwebui_runtime.py  # Session, tool loop, budget, phase management
 │   └── tools.py            # OpenAI-compatible BIRD tool schemas
 ├── db_environment/         # DB service (port 6002)
-│   └── server.py           # SQL execution, evaluation, per-task DB
+│   ├── server.py           # SQL execution, evaluation, per-task DB
+│   └── knowledge_graph.py  # Optional Neo4j kg-v1 repositories
+├── embedding/              # Optional OpenAI text-embedding gateway (6003)
 ├── user_simulator/         # User sim service (port 6001)
 │   ├── server.py           # Two-stage simulator (action parser + response generator)
 │   ├── prompts.py          # Prompt templates
@@ -233,8 +261,8 @@ Set `DATASET=lite` or `DATASET=full` in `.env`.
 │   └── prompts/              # UTF-8 system prompt templates
 ├── bird-interact-lite/     # Lite dataset (300 tasks)
 ├── bird-interact-full/     # Full dataset (600 tasks)
-├── docker-compose.yml      # PostgreSQL containers
-├── scripts/                # Service startup scripts
+├── docker-compose.yml      # PostgreSQL + opt-in Neo4j containers
+├── scripts/                # Service startup and graph provisioning scripts
 ├── .env.example            # Configuration template
 └── requirements.txt
 ```

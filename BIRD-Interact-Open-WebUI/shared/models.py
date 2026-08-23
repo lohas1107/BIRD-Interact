@@ -1,6 +1,6 @@
 """Pydantic models for inter-service communication."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Any, Dict, List, Optional
 
 
@@ -36,6 +36,39 @@ class SubmitSQLResponse(BaseModel):
 
 class SchemaRequest(BaseModel):
     task_id: str
+
+
+class TableSchemaRequest(BaseModel):
+    task_id: str
+    database_name: str
+    from_table: str
+    to_table: Optional[str] = None
+    # Graph validation deliberately lives in the repository so malformed
+    # requests use the stable INVALID_REQUEST response instead of FastAPI's
+    # default 422 payload.
+    include: Any = None
+    hops: Any = 5
+    paths: Any = 5
+
+
+class KnowledgeGraphExpandRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    depth: Any = None
+    nodes: Any = None
+
+
+class KnowledgeGraphRequest(BaseModel):
+    task_id: str
+    knowledge_id: Any = None
+    include: Any = None
+    expand: Any = None
+
+
+class SearchSemanticContextRequest(BaseModel):
+    task_id: str
+    queries: Any = None
+    top_k: Any = None
+    resource_types: Any = None
 
 
 class ColumnMeaningRequest(BaseModel):

@@ -8,6 +8,8 @@ python-dotenv>=1.0.0
 
 # Database
 psycopg2-binary>=2.9.9
+neo4j>=5.20.0,<6.0.0
+openai>=1.40.0
 
 # Utilities
 sqlglot>=23.0.0
