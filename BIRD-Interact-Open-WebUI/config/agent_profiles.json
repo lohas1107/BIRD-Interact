@@ -69,6 +69,16 @@
         "execute_sql",
         "submit_sql"
       ]
+    },
+    "metadata-5-2-kg": {
+      "prompt_file": "prompts/metadata-5-2-kg.md",
+      "tools": [
+        "ask_user",
+        "search_semantic_context_5_2",
+        "get_knowledge",
+        "execute_sql",
+        "submit_sql"
+      ]
     }
   }
 }

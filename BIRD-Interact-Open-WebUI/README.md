@@ -103,6 +103,20 @@ DATASET=lite bash scripts/provision_kg.sh
 `DATASET=full` selects `bird-interact-full`. Provisioning is rerunnable and
 does not reset Neo4j unless `RESET_KG=1` is explicitly supplied.
 
+The opt-in `metadata-5-2-kg` profile uses the fixed local metadata corpus.
+Build it once after PostgreSQL is available, then build its local embedding
+cache while the embedding service is running:
+
+```bash
+python scripts/generate_metadata_5_2.py
+python scripts/build_metadata_embeddings_5_2.py
+```
+
+Both commands fail closed: corpus generation requires read-only PostgreSQL
+range queries for every lite column, and evaluation never rebuilds a missing
+JSON or vector cache. The JSON files and manifest are source artifacts; the
+NumPy vectors under `.cache/metadata-5-2-kg/` are local cache files.
+
 Create the first Open WebUI account through `http://127.0.0.1:3000`, then create an Open WebUI API key from the account settings and put it in `.env` as `OPEN_WEBUI_API_KEY`. The key authenticates the BIRD services; the upstream vLLM server does not require a provider API key.
 
 Verify the complete model path:
@@ -131,6 +145,8 @@ python -m orchestrator.runner --mode a-interact --limit 10
 python -m orchestrator.runner --mode a-interact --agent-profile a-interact-schema
 python -m orchestrator.runner --mode a-interact --agent-profile kg-v1
 python -m orchestrator.runner --mode c-interact --agent-profile kg-v1
+python -m orchestrator.runner --mode a-interact --agent-profile metadata-5-2-kg
+python -m orchestrator.runner --mode c-interact --agent-profile metadata-5-2-kg
 python -m orchestrator.runner --mode c-interact --agent-profiles-file /path/to/agent_profiles.json
 
 # Full dataset

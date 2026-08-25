@@ -45,7 +45,13 @@ class AgentProfileTests(unittest.TestCase):
         self.assertEqual(c_profile.tools, ("ask_user", "submit_sql"))
         self.assertEqual(
             set(a_profile.tools),
-            set(VALID_TOOLS) - {"search_semantic_context", "get_knowledge", "get_table_schema"},
+            set(VALID_TOOLS)
+            - {
+                "search_semantic_context",
+                "search_semantic_context_5_2",
+                "get_knowledge",
+                "get_table_schema",
+            },
         )
         self.assertEqual(
             resolve_agent_profile("a-interact", "kg-v1").tools,

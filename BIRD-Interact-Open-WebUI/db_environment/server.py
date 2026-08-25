@@ -28,6 +28,7 @@ from db_environment.knowledge_graph import (
     Neo4jSchemaRepository,
     SemanticSearchRepository,
 )
+from db_environment.metadata_5_2 import MetadataSearchRepository
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title="BIRD-Interact DB Environment", version="1.0.0")
@@ -44,6 +45,7 @@ _successful_phase1_sql: Dict[str, str] = {}
 _knowledge_graph = Neo4jSchemaRepository(settings)
 _knowledge_repository = Neo4jKnowledgeRepository(settings)
 _semantic_search = SemanticSearchRepository(settings)
+_metadata_search = MetadataSearchRepository(settings)
 
 
 def _load_db_data(db_name: str):
@@ -412,6 +414,25 @@ async def search_semantic_context(req: SearchSemanticContextRequest):
         raise _graph_error(exc) from exc
 
 
+@app.post("/search/semantic_context_5_2")
+async def search_semantic_context_5_2(req: SearchSemanticContextRequest):
+    """Search fixed local metadata plus optionally task-visible Knowledge."""
+    td = _task_data.get(req.task_id)
+    if not td:
+        raise HTTPException(404, f"Task {req.task_id} not initialized")
+    db_name = str(td.get("selected_database", "")).casefold()
+    try:
+        return await asyncio.to_thread(
+            _metadata_search.search,
+            req,
+            db_name,
+            _masked_knowledge_ids(db_name, td),
+            _semantic_search.search,
+        )
+    except GraphSchemaError as exc:
+        raise _graph_error(exc) from exc
+
+
 @app.post("/knowledge/graph")
 async def get_knowledge_graph(req: KnowledgeGraphRequest):
     """Read the global-ID Knowledge graph with task-scoped masking."""
@@ -516,6 +537,7 @@ async def close_knowledge_graph():
         asyncio.to_thread(_knowledge_graph.close),
         asyncio.to_thread(_knowledge_repository.close),
         asyncio.to_thread(_semantic_search.close),
+        asyncio.to_thread(_metadata_search.close),
     )
 
 

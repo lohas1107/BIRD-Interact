@@ -23,7 +23,12 @@ results/
 *.log
 batch_evaluation.log
 
-# Data (download from HuggingFace, not committed)
+# Fixed metadata JSON/manifest are source artifacts; only their local vectors
+# are ignored because they are reproducible from the pinned embedding model.
+.cache/metadata-5-2-kg/
+
+# Data (download from HuggingFace, not committed). The dataset repository
+# carries the fixed metadata JSON/manifest artifacts independently.
 bird-interact-lite/
 bird-interact-full/
 

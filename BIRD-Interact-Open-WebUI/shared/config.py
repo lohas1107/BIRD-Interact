@@ -87,6 +87,16 @@ class Settings(BaseSettings):
     def db_data_path(self) -> str:
         return str(self.data_dir)
 
+    @property
+    def metadata_manifest_path(self) -> Path:
+        """Fixed metadata corpus manifest used by the metadata-5-2 profile."""
+        return self.data_dir / "metadata_manifest.json"
+
+    @property
+    def metadata_cache_dir(self) -> Path:
+        """Gitignored vector cache for metadata-5-2 retrieval."""
+        return self.project_root / ".cache" / "metadata-5-2-kg"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
