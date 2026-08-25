@@ -79,6 +79,15 @@
         "execute_sql",
         "submit_sql"
       ]
+    },
+    "metadata-5-2": {
+      "prompt_file": "prompts/metadata-5-2.md",
+      "tools": [
+        "ask_user",
+        "search_metadata_5_2",
+        "execute_sql",
+        "submit_sql"
+      ]
     }
   }
 }

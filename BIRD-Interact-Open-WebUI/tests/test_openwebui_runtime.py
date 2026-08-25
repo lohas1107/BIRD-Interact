@@ -65,7 +65,7 @@ class OpenWebUIRuntimeTests(unittest.TestCase):
             runtime = OpenWebUIRuntime()
             profile = _profile(
                 "ordered",
-                ["submit_sql", "get_schema", "ask_user"],
+                ["submit_sql", "get_schema", "ask_user", "search_metadata_5_2"],
                 "{{db_name}}|{{db_schema}}|{{external_kg}}|{{max_turn}}|{{available_tools}}",
             )
             await runtime.init_session(
@@ -79,6 +79,10 @@ class OpenWebUIRuntimeTests(unittest.TestCase):
             self.assertIn("- submit_sql: submit the SQL for evaluation. Cost: 3", system_message)
             self.assertIn("- get_schema: get the database schema. Cost: 1", system_message)
             self.assertIn("- ask_user: ask the user a clarification question. Cost: 2", system_message)
+            self.assertIn(
+                "- search_metadata_5_2: search fixed metadata candidates only; do not infer semantic definitions from metadata. Cost: 2",
+                system_message,
+            )
 
             runtime._sessions[("a-interact", "ordered")].state["db_name"] = "changed"
             self.assertEqual(

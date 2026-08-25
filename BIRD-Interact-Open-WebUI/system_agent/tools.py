@@ -110,6 +110,26 @@ _SCHEMAS = {
         },
         ["queries", "top_k", "resource_types"],
     ),
+    "search_metadata_5_2": _schema(
+        "search_metadata_5_2",
+        "Search the fixed metadata-5-2 candidate corpus. Results are candidate metadata only; do not infer formulas, classifications, thresholds, or conditions from them. Cost: 2 bird-coins.",
+        {
+            "queries": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+                "minItems": 1,
+                "maxItems": 8,
+                "description": "One to eight non-empty search queries.",
+            },
+            "top_k": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "description": "Maximum metadata columns to return.",
+            },
+        },
+        ["queries", "top_k"],
+    ),
     "get_knowledge": _schema(
         "get_knowledge",
         "Get the authoritative Knowledge definition for a canonical ID and optionally expand ordered DEPENDS_ON dependencies. Cost: 0.5 bird-coins.",
@@ -309,6 +329,21 @@ def _validate_graph_args(name: str, args: Dict[str, Any]) -> None:
             )
         return
 
+    if name == "search_metadata_5_2":
+        queries = args.get("queries")
+        if (
+            not isinstance(queries, list)
+            or not 1 <= len(queries) <= 8
+            or any(not isinstance(value, str) or not value.strip() for value in queries)
+        ):
+            raise GraphToolError("INVALID_REQUEST", "queries must contain 1 through 8 non-empty strings")
+        top_k = args.get("top_k")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 20:
+            raise GraphToolError("INVALID_REQUEST", "top_k must be an integer from 1 through 20")
+        if set(args) != {"queries", "top_k"}:
+            raise GraphToolError("INVALID_REQUEST", "search_metadata_5_2 accepts only queries and top_k")
+        return
+
     if name == "get_knowledge":
         knowledge_id = args.get("knowledge_id")
         if not isinstance(knowledge_id, str) or re.fullmatch(r"[a-z][a-z0-9_]*:[0-9]+", knowledge_id) is None:
@@ -406,6 +441,22 @@ def _search_semantic_context_5_2(task_id: str, args: Dict[str, Any]) -> str:
     if set(data) != {"knowledge", "metadata"}:
         raise GraphToolError("GRAPH_QUERY_FAILED", "metadata search returned an invalid response shape")
     return json.dumps({"knowledge": data["knowledge"], "metadata": data["metadata"]}, ensure_ascii=False)
+
+
+def _search_metadata_5_2(task_id: str, args: Dict[str, Any]) -> str:
+    payload = {
+        "task_id": task_id,
+        "queries": args.get("queries"),
+        "top_k": args.get("top_k"),
+    }
+    data = _post_graph(
+        "/search/metadata_5_2",
+        payload,
+        120.0,
+    )
+    if set(data) != {"metadata"} or not isinstance(data["metadata"], list):
+        raise GraphToolError("GRAPH_QUERY_FAILED", "metadata-only search returned an invalid response shape")
+    return json.dumps({"metadata": data["metadata"]}, ensure_ascii=False)
 
 
 def _get_graph_knowledge(task_id: str, args: Dict[str, Any]) -> str:
@@ -527,6 +578,10 @@ def _handle_search_semantic_context_5_2(args: Dict[str, Any], task_id: str, stat
     return _search_semantic_context_5_2(task_id, args)
 
 
+def _handle_search_metadata_5_2(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
+    return _search_metadata_5_2(task_id, args)
+
+
 def _handle_get_knowledge(args: Dict[str, Any], task_id: str, state: Dict[str, Any]) -> str:
     return _get_graph_knowledge(task_id, args)
 
@@ -570,6 +625,7 @@ def _build_registry() -> dict[str, ToolSpec]:
         ("get_schema", 1.0, _handle_get_schema),
         ("search_semantic_context", 2.0, _handle_search_semantic_context),
         ("search_semantic_context_5_2", 2.0, _handle_search_semantic_context_5_2),
+        ("search_metadata_5_2", 2.0, _handle_search_metadata_5_2),
         ("get_knowledge", 0.5, _handle_get_knowledge),
         ("get_table_schema", 0.5, _handle_get_table_schema),
         ("get_all_column_meanings", 1.0, _handle_get_all_column_meanings),
@@ -642,7 +698,13 @@ def execute_tool(
 
     state["_last_tool_dispatch_error"] = False
     try:
-        if name in {"search_semantic_context", "search_semantic_context_5_2", "get_knowledge", "get_table_schema"}:
+        if name in {
+            "search_semantic_context",
+            "search_semantic_context_5_2",
+            "search_metadata_5_2",
+            "get_knowledge",
+            "get_table_schema",
+        }:
             _validate_graph_args(name, args)
         return spec.handler(args, task_id, state)
     except GraphToolError as exc:

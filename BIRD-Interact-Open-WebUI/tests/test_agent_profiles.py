@@ -49,6 +49,7 @@ class AgentProfileTests(unittest.TestCase):
             - {
                 "search_semantic_context",
                 "search_semantic_context_5_2",
+                "search_metadata_5_2",
                 "get_knowledge",
                 "get_table_schema",
             },
@@ -65,6 +66,21 @@ class AgentProfileTests(unittest.TestCase):
             ),
         )
         self.assertIn("{{db_name}}", c_profile.prompt_template)
+
+    def test_metadata_profile_is_opt_in_and_metadata_only(self):
+        expected = (
+            "ask_user",
+            "search_metadata_5_2",
+            "execute_sql",
+            "submit_sql",
+        )
+        for mode in ("a-interact", "c-interact"):
+            profile = resolve_agent_profile(mode, "metadata-5-2")
+            self.assertEqual(profile.tools, expected)
+            self.assertNotIn("get_knowledge", profile.tools)
+            self.assertNotIn("Knowledge", profile.prompt_template)
+        self.assertEqual(resolve_agent_profile("a-interact").name, "a-interact-default")
+        self.assertEqual(resolve_agent_profile("c-interact").name, "c-interact-default")
 
     def test_custom_profiles_allow_empty_prompt_and_cross_mode_tools(self):
         path = self._config(

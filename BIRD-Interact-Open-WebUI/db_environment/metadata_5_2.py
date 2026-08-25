@@ -391,6 +391,32 @@ def _normalize_request(request: Any) -> dict[str, Any]:
     }
 
 
+def _normalize_metadata_request(request: Any) -> dict[str, Any]:
+    """Validate the public metadata-only request without resource selectors."""
+    if isinstance(request, Mapping):
+        extra = set(request).difference({"queries", "top_k"})
+        if extra:
+            field = sorted(extra)[0]
+            raise MetadataSearchError("INVALID_REQUEST", f"unsupported metadata search field: {field}")
+
+    def value(key: str, default: Any = None) -> Any:
+        if isinstance(request, Mapping):
+            return request.get(key, default)
+        return getattr(request, key, default)
+
+    queries = value("queries")
+    if (
+        not isinstance(queries, list)
+        or not 1 <= len(queries) <= 8
+        or any(not isinstance(item, str) or not item.strip() for item in queries)
+    ):
+        raise MetadataSearchError("INVALID_REQUEST", "queries must contain 1 through 8 non-empty strings")
+    top_k = value("top_k")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 20:
+        raise MetadataSearchError("INVALID_REQUEST", "top_k must be an integer from 1 through 20")
+    return {"queries": [item.strip() for item in queries], "top_k": top_k}
+
+
 def _safe_cosine(query_vectors: Any, corpus_vectors: Any) -> Any:
     if np is None:  # pragma: no cover - guarded by repository load
         raise MetadataSearchError("METADATA_UNAVAILABLE", "NumPy is required for metadata retrieval")
@@ -631,6 +657,32 @@ class MetadataSearchRepository:
             column_scores[column_id] = max(column_scores.get(column_id, 0.0), float(score))
         ranked = sorted(column_scores.items(), key=lambda item: (-item[1], item[0]))[:top_k]
         return [self._public_column(self._columns[column_id], score, hidden_ids) for column_id, score in ranked]
+
+    def search_metadata(
+        self,
+        request: Any,
+        database_name: str,
+        hidden_ids: Any = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return only metadata candidates, without invoking Knowledge search."""
+        query = _normalize_metadata_request(request)
+        database_name = str(database_name).strip().casefold()
+        if not database_name:
+            raise MetadataSearchError("INVALID_REQUEST", "task selected database is required")
+        self._load()
+        all_hidden = {
+            str(item).strip()
+            for item in (hidden_ids or [])
+            if isinstance(item, str) and item.strip()
+        }
+        return {
+            "metadata": self._search_metadata(
+                database_name,
+                query["queries"],
+                query["top_k"],
+                all_hidden,
+            )
+        }
 
     def search(
         self,

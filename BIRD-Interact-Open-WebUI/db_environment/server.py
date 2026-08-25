@@ -19,7 +19,7 @@ from shared.db_utils import (
 from shared.models import (
     ExecuteSQLRequest, ExecuteSQLResponse, InitTaskRequest,
     SchemaRequest, TableSchemaRequest, KnowledgeGraphRequest,
-    SearchSemanticContextRequest, ColumnMeaningRequest, KnowledgeRequest,
+    SearchSemanticContextRequest, MetadataSearchRequest, ColumnMeaningRequest, KnowledgeRequest,
     SubmitSQLRequest, SubmitSQLResponse,
 )
 from db_environment.knowledge_graph import (
@@ -428,6 +428,31 @@ async def search_semantic_context_5_2(req: SearchSemanticContextRequest):
             db_name,
             _masked_knowledge_ids(db_name, td),
             _semantic_search.search,
+        )
+    except GraphSchemaError as exc:
+        raise _graph_error(exc) from exc
+
+
+@app.post("/search/metadata_5_2")
+async def search_metadata_5_2(req: MetadataSearchRequest):
+    """Search only the task-visible metadata candidate corpus."""
+    td = _task_data.get(req.task_id)
+    if not td:
+        raise HTTPException(404, f"Task {req.task_id} not initialized")
+    extra = getattr(req, "model_extra", None) or {}
+    if extra:
+        field = sorted(extra)[0]
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_REQUEST", "message": f"unsupported metadata search field: {field}"},
+        )
+    db_name = str(td.get("selected_database", "")).casefold()
+    try:
+        return await asyncio.to_thread(
+            _metadata_search.search_metadata,
+            req,
+            db_name,
+            _masked_knowledge_ids(db_name, td),
         )
     except GraphSchemaError as exc:
         raise _graph_error(exc) from exc

@@ -71,6 +71,15 @@ class SearchSemanticContextRequest(BaseModel):
     resource_types: Any = None
 
 
+class MetadataSearchRequest(BaseModel):
+    """Request contract for the metadata-only semantic search route."""
+
+    model_config = ConfigDict(extra="allow")
+    task_id: str
+    queries: Any = None
+    top_k: Any = None
+
+
 class ColumnMeaningRequest(BaseModel):
     task_id: str
     table_name: str

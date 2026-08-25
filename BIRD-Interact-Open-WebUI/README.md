@@ -117,6 +117,15 @@ range queries for every lite column, and evaluation never rebuilds a missing
 JSON or vector cache. The JSON files and manifest are source artifacts; the
 NumPy vectors under `.cache/metadata-5-2-kg/` are local cache files.
 
+The opt-in `metadata-5-2` profile reuses those same metadata assets but exposes
+metadata candidates only. It is available for both interaction modes and does
+not provide the Knowledge search tools or change either mode's default profile:
+
+```bash
+python -m orchestrator.runner --mode a-interact --agent-profile metadata-5-2
+python -m orchestrator.runner --mode c-interact --agent-profile metadata-5-2
+```
+
 Create the first Open WebUI account through `http://127.0.0.1:3000`, then create an Open WebUI API key from the account settings and put it in `.env` as `OPEN_WEBUI_API_KEY`. The key authenticates the BIRD services; the upstream vLLM server does not require a provider API key.
 
 Verify the complete model path:
@@ -147,6 +156,8 @@ python -m orchestrator.runner --mode a-interact --agent-profile kg-v1
 python -m orchestrator.runner --mode c-interact --agent-profile kg-v1
 python -m orchestrator.runner --mode a-interact --agent-profile metadata-5-2-kg
 python -m orchestrator.runner --mode c-interact --agent-profile metadata-5-2-kg
+python -m orchestrator.runner --mode a-interact --agent-profile metadata-5-2
+python -m orchestrator.runner --mode c-interact --agent-profile metadata-5-2
 python -m orchestrator.runner --mode c-interact --agent-profiles-file /path/to/agent_profiles.json
 
 # Full dataset

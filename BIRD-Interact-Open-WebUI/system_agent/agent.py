@@ -16,6 +16,7 @@ _TOOL_PROMPT_ORDER = (
     "ask_user",
     "search_semantic_context",
     "search_semantic_context_5_2",
+    "search_metadata_5_2",
     "get_knowledge",
     "get_table_schema",
     "execute_sql",
@@ -31,6 +32,7 @@ _TOOL_PROMPT_ORDER = (
 _TOOL_PROMPT_TEXT = {
     "search_semantic_context": "search candidate Knowledge and table-schema context. Cost: 2",
     "search_semantic_context_5_2": "search candidate Knowledge and fixed metadata context; metadata is not authoritative. Cost: 2",
+    "search_metadata_5_2": "search fixed metadata candidates only; do not infer semantic definitions from metadata. Cost: 2",
     "get_knowledge": "get an authoritative Knowledge definition and dependencies. Cost: 0.5",
     "get_table_schema": "get targeted table schema, constraints, and join paths. Cost: 0.5",
     "execute_sql": "execute a PostgreSQL query. Cost: 1",

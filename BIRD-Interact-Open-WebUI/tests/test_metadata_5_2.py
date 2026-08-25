@@ -1,3 +1,4 @@
+import asyncio
 import json
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from unittest.mock import patch
 
 import numpy as np
 
+from db_environment import server as db_server
 from db_environment.metadata_5_2 import (
     MetadataSearchError,
     MetadataSearchRepository,
@@ -15,6 +17,7 @@ from db_environment.metadata_5_2 import (
 )
 from scripts.generate_metadata_5_2 import MetadataCorpusGenerator
 from shared.agent_profiles import resolve_agent_profile
+from shared.models import MetadataSearchRequest
 from system_agent import tools
 
 
@@ -164,6 +167,29 @@ class MetadataSearchTests(unittest.TestCase):
         self.assertNotIn("knowledge_refs", json.dumps(response))
         self.assertNotIn("table_schema", response)
 
+    def test_metadata_only_response_has_no_knowledge_shape(self):
+        _EmbeddingClient.vectors = [[1.0] + [0.0] * 1535]
+        repository = MetadataSearchRepository(self.config)
+        with patch("db_environment.metadata_5_2.httpx.Client", _EmbeddingClient):
+            response = repository.search_metadata(
+                {"queries": ["score"], "top_k": 1},
+                "alien",
+                {"alien:7"},
+            )
+        self.assertEqual(set(response), {"metadata"})
+        self.assertEqual(len(response["metadata"]), 1)
+        self.assertEqual(response["metadata"][0]["column_id"], "alien:signals:score")
+        self.assertNotIn("knowledge", response)
+        self.assertNotIn("knowledge_refs", json.dumps(response))
+
+    def test_metadata_only_request_rejects_resource_selector(self):
+        repository = MetadataSearchRepository(self.config)
+        with self.assertRaisesRegex(MetadataSearchError, "unsupported metadata search field"):
+            repository.search_metadata(
+                {"queries": ["score"], "top_k": 1, "resource_types": ["metadata"]},
+                "alien",
+            )
+
     def test_new_tool_forwards_server_task_and_fixed_response_shape(self):
         class Response:
             status_code = 200
@@ -195,6 +221,72 @@ class MetadataSearchTests(unittest.TestCase):
             result = tools.execute_tool("search_semantic_context_5_2", args, "server-task", state)
         self.assertEqual(json.loads(result), {"knowledge": [], "metadata": []})
         self.assertEqual(Client.calls[0][1]["task_id"], "server-task")
+
+    def test_metadata_only_tool_forwards_server_task_and_only_metadata(self):
+        class Response:
+            status_code = 200
+            text = ""
+
+            @staticmethod
+            def json():
+                return {"metadata": []}
+
+        class Client:
+            calls = []
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+            def post(self, url, json):
+                self.calls.append((url, json))
+                return Response()
+
+        state = {"agent_profile": {"name": "metadata-5-2", "tools": ["search_metadata_5_2"]}}
+        args = {"queries": ["x"], "top_k": 1}
+        with patch("system_agent.tools.httpx.Client", Client):
+            result = tools.execute_tool("search_metadata_5_2", args, "server-task", state)
+        self.assertEqual(json.loads(result), {"metadata": []})
+        self.assertEqual(Client.calls[0][0].rsplit("/", 1)[-1], "metadata_5_2")
+        self.assertEqual(Client.calls[0][1], {"task_id": "server-task", **args})
+
+    def test_metadata_only_tool_rejects_knowledge_response(self):
+        class Response:
+            status_code = 200
+            text = ""
+
+            @staticmethod
+            def json():
+                return {"knowledge": [], "metadata": []}
+
+        class Client:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+            def post(self, url, json):
+                return Response()
+
+        state = {"agent_profile": {"name": "metadata-5-2", "tools": ["search_metadata_5_2"]}}
+        with patch("system_agent.tools.httpx.Client", Client):
+            result = tools.execute_tool(
+                "search_metadata_5_2",
+                {"queries": ["x"], "top_k": 1},
+                "server-task",
+                state,
+            )
+        self.assertIn("GRAPH_QUERY_FAILED", result)
+        self.assertTrue(state["_last_tool_dispatch_error"])
 
     def test_missing_cache_and_embedding_failure_are_fail_closed(self):
         cache_file = self.cache / "metadata_embeddings.npz"
@@ -285,6 +377,70 @@ class MetadataProfileAndToolTests(unittest.TestCase):
             schema["function"]["parameters"]["properties"]["resource_types"]["items"]["enum"],
             ["knowledge", "metadata"],
         )
+
+        new_profile = resolve_agent_profile("a-interact", "metadata-5-2")
+        self.assertEqual(
+            new_profile.tools,
+            ("ask_user", "search_metadata_5_2", "execute_sql", "submit_sql"),
+        )
+        metadata_schema = tools.TOOL_SCHEMAS["search_metadata_5_2"]
+        parameters = metadata_schema["function"]["parameters"]
+        self.assertEqual(parameters["required"], ["queries", "top_k"])
+        self.assertNotIn("resource_types", parameters["properties"])
+        self.assertEqual(tools.tool_cost("search_metadata_5_2"), 2.0)
+
+
+class MetadataRouteTests(unittest.TestCase):
+    def test_metadata_route_calls_metadata_only_repository_and_returns_only_metadata(self):
+        class Repository:
+            calls = []
+
+            @staticmethod
+            def search_metadata(request, database_name, hidden_ids):
+                Repository.calls.append((request, database_name, hidden_ids))
+                return {"metadata": [{"column_id": "alien:signals:score"}]}
+
+        old_task_data = db_server._task_data
+        old_repository = db_server._metadata_search
+        db_server._task_data = {
+            "route-task": {
+                "selected_database": "Alien",
+                "knowledge_ambiguity": [{"deleted_knowledge": 7}],
+            }
+        }
+        db_server._metadata_search = Repository()
+        try:
+            response = asyncio.run(
+                db_server.search_metadata_5_2(
+                    MetadataSearchRequest(task_id="route-task", queries=["score"], top_k=1)
+                )
+            )
+        finally:
+            db_server._task_data = old_task_data
+            db_server._metadata_search = old_repository
+
+        self.assertEqual(response, {"metadata": [{"column_id": "alien:signals:score"}]})
+        self.assertEqual(len(Repository.calls), 1)
+        _, database_name, hidden_ids = Repository.calls[0]
+        self.assertEqual(database_name, "alien")
+        self.assertEqual(hidden_ids, {"alien:7"})
+
+    def test_metadata_route_rejects_resource_selector(self):
+        db_server._task_data["route-invalid"] = {"selected_database": "alien"}
+        self.addCleanup(db_server._task_data.pop, "route-invalid", None)
+        with self.assertRaises(Exception) as raised:
+            asyncio.run(
+                db_server.search_metadata_5_2(
+                    MetadataSearchRequest(
+                        task_id="route-invalid",
+                        queries=["score"],
+                        top_k=1,
+                        resource_types=["metadata"],
+                    )
+                )
+            )
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertEqual(raised.exception.detail["code"], "INVALID_REQUEST")
 
 
 if __name__ == "__main__":
