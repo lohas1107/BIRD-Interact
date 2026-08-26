@@ -43,10 +43,10 @@ class EmbeddingCacheBuildError(RuntimeError):
     pass
 
 
-def _fragments(data_dir: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
+def _fragments(metadata_dir: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for database in manifest["databases"]:
-        path = data_dir / database / f"{database}_metadata.json"
+        path = metadata_dir / f"{database}_metadata.json"
         raw = _read_json(path, label=f"{database} metadata")
         columns = _validate_metadata_file(raw, database)
         for column_id in sorted(columns):
@@ -109,13 +109,13 @@ def _embed(texts: list[str], embedding_url: str, timeout: float) -> list[list[fl
     return vectors
 
 
-def build_cache(data_dir: Path, cache_dir: Path, embedding_url: str, timeout: float) -> dict[str, Any]:
+def build_cache(metadata_dir: Path, cache_dir: Path, embedding_url: str, timeout: float) -> dict[str, Any]:
     try:
         import numpy as np
     except ImportError as exc:  # pragma: no cover - requirements install path
         raise EmbeddingCacheBuildError("NumPy is required to build metadata embeddings") from exc
 
-    manifest = _read_json(metadata_manifest_path(data_dir), label="metadata manifest")
+    manifest = _read_json(metadata_manifest_path(metadata_dir), label="metadata manifest")
     if manifest.get("schema_version") != METADATA_SCHEMA_VERSION:
         raise EmbeddingCacheBuildError("metadata manifest schema_version is unsupported")
     if manifest.get("embedding_model") != EMBEDDING_MODEL or manifest.get("dimensions") != EMBEDDING_DIMENSIONS:
@@ -124,7 +124,7 @@ def build_cache(data_dir: Path, cache_dir: Path, embedding_url: str, timeout: fl
     if not isinstance(databases, list) or not databases:
         raise EmbeddingCacheBuildError("metadata manifest has no databases")
 
-    fragments = _fragments(data_dir, manifest)
+    fragments = _fragments(metadata_dir, manifest)
     vectors = _embed([item["text"] for item in fragments], embedding_url, timeout)
     matrix = np.asarray(vectors, dtype=np.float32)
     if matrix.shape != (len(fragments), EMBEDDING_DIMENSIONS) or not np.isfinite(matrix).all():
@@ -166,13 +166,13 @@ def build_cache(data_dir: Path, cache_dir: Path, embedding_url: str, timeout: fl
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", type=Path, default=settings.data_dir)
+    parser.add_argument("--metadata-dir", type=Path, default=settings.metadata_dir)
     parser.add_argument("--cache-dir", type=Path, default=metadata_cache_dir())
     parser.add_argument("--embedding-url", default=settings.embedding_service_url)
     parser.add_argument("--timeout", type=float, default=settings.embedding_timeout)
     args = parser.parse_args()
     try:
-        result = build_cache(args.data.resolve(), args.cache_dir.resolve(), args.embedding_url, args.timeout)
+        result = build_cache(args.metadata_dir.resolve(), args.cache_dir.resolve(), args.embedding_url, args.timeout)
     except (EmbeddingCacheBuildError, MetadataSearchError) as exc:
         print(f"metadata embedding cache build failed: {exc}", file=sys.stderr)
         return 1

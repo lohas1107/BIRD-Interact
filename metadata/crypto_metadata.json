@@ -1,0 +1,4642 @@
+{
+  "schema_version": "metadata-5-2-v1",
+  "database": "crypto",
+  "formulas": [
+    {
+      "value": "Spread Percentage: Spread Percentage = \\frac{askquote - bidquote}{midquote} \\times 100, \\text{where } askquote \\text{ is the best ask price, } bidquote \\text{ is the best bid price, and } midquote \\text{ is the midpoint price.}",
+      "knowledge_refs": [
+        "crypto:0"
+      ]
+    },
+    {
+      "value": "Slippage Impact: Slippage Impact = \\frac{dealcount}{bidunits \\text{ or } askunits} \\times spreadband, \\text{where } dealcount \\text{ is the order quantity, } bidunits/askunits \\text{ is the quantity available at best bid/ask, and } spreadband \\text{ is the raw spread.}",
+      "knowledge_refs": [
+        "crypto:1"
+      ]
+    },
+    {
+      "value": "Position Value at Risk (PVaR): PVaR = possum \\times volmeter \\times 0.01, \\text{where } possum \\text{ is the notional value of position and } volmeter \\text{ is the volatility or fluctuation rating.}",
+      "knowledge_refs": [
+        "crypto:2"
+      ]
+    },
+    {
+      "value": "Arbitrage Opportunity Score (AOS): AOS = arbpotential + xexchband + (fundgap \\times 2) + basisgap, \\text{where these components represent different types of arbitrage opportunities.}",
+      "knowledge_refs": [
+        "crypto:3"
+      ]
+    },
+    {
+      "value": "Market Impact Cost (MIC): MIC = dealcount \\times dealquote \\times mkteffect \\times 0.01, \\text{where } dealcount \\text{ is the order quantity, } dealquote \\text{ is the limit or stop price, and } mkteffect \\text{ is the approximating internal market impact.}",
+      "knowledge_refs": [
+        "crypto:4"
+      ]
+    },
+    {
+      "value": "Liquidity Ratio: Liquidity Ratio = \\frac{(bidunits + askunits) \\times midquote}{volday}, \\text{where } bidunits \\text{ and } askunits \\text{ are quantities at best bid and ask, } midquote \\text{ is the midpoint price, and } volday \\text{ is the 24h volume.}",
+      "knowledge_refs": [
+        "crypto:5"
+      ]
+    },
+    {
+      "value": "Realized Risk Ratio (RRR): RRR = \\frac{realline}{PVaR}, \\text{where } realline \\text{ is the realized PnL and } PVaR \\text{ is the Position Value at Risk.}",
+      "knowledge_refs": [
+        "crypto:6"
+      ]
+    },
+    {
+      "value": "Margin Utilization: Margin Utilization = \\frac{inithold}{margsum} \\times 100, \\text{where } inithold \\text{ is the initial margin required and } margsum \\text{ is the margin account balance.}",
+      "knowledge_refs": [
+        "crypto:7"
+      ]
+    },
+    {
+      "value": "Order Fill Rate: Order Fill Rate = \\frac{dealcount - remaincount}{dealcount} \\times 100, \\text{where } dealcount \\text{ is the order quantity and } remaincount \\text{ is how many units remain unfilled.}",
+      "knowledge_refs": [
+        "crypto:8"
+      ]
+    },
+    {
+      "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+      "knowledge_refs": [
+        "crypto:9"
+      ]
+    },
+    {
+      "value": "Liquidation Risk Level: Positions are categorized as 'Safe', 'Moderate', or 'High Risk' based on how close the current market price is to the liqquote (liquidation price). A position is 'High Risk' when market price is within 5% of liqquote.",
+      "knowledge_refs": [
+        "crypto:11"
+      ]
+    },
+    {
+      "value": "Arbitrage Window: A market condition where the Arbitrage Opportunity Score exceeds 0.05, indicating substantial price discrepancies that can be exploited.",
+      "knowledge_refs": [
+        "crypto:12"
+      ]
+    },
+    {
+      "value": "Liquidity Crisis: Market conditions where the Liquidity Ratio falls below 0.01, indicating insufficient market depth relative to typical trading volume.",
+      "knowledge_refs": [
+        "crypto:16"
+      ]
+    },
+    {
+      "value": "dealedge: An enum with values 'Buy' or 'Sell'. 'Buy' indicates the order is to purchase the base asset using the quote asset (e.g., buying BTC with USDT). 'Sell' indicates the order is to sell the base asset for the quote asset (e.g., selling BTC for USDT).",
+      "knowledge_refs": [
+        "crypto:20"
+      ]
+    },
+    {
+      "value": "orderflow: An enum with values 'New', 'PartiallyFilled', 'Cancelled', or 'Filled'. 'New' indicates a newly placed order that hasn't been matched. 'PartiallyFilled' means some portion has been executed but not all. 'Cancelled' means the order was cancelled before full execution. 'Filled' means the order has been completely executed.",
+      "knowledge_refs": [
+        "crypto:21"
+      ]
+    },
+    {
+      "value": "timespan: An enum with values 'IOC', 'GTC', 'GTD', or 'FOK'. 'IOC' (Immediate-or-Cancel) means execute immediately available portion or cancel. 'GTC' (Good-Till-Cancelled) means the order remains active until explicitly cancelled. 'GTD' (Good-Till-Date) means the order remains active until a specified date. 'FOK' (Fill-or-Kill) means execute completely immediately or cancel entirely.",
+      "knowledge_refs": [
+        "crypto:22"
+      ]
+    },
+    {
+      "value": "posedge: An enum with values 'Long' or 'Short'. 'Long' indicates a position that profits from price increases of the underlying asset. 'Short' indicates a position that profits from price decreases of the underlying asset.",
+      "knowledge_refs": [
+        "crypto:23"
+      ]
+    },
+    {
+      "value": "posmagn: An enum with values '1', '2', '3', '5', '10', '20', '50', or '100', representing leverage multipliers. For example, '10' means the position uses 10x leverage, amplifying both potential profits and losses by a factor of 10 compared to an unleveraged position.",
+      "knowledge_refs": [
+        "crypto:24"
+      ]
+    },
+    {
+      "value": "mktfeel: An enum with values 'Bearish', 'Bullish', or 'Neutral'. 'Bearish' indicates negative market sentiment with expectations of price decreases. 'Bullish' indicates positive market sentiment with expectations of price increases. 'Neutral' indicates balanced market sentiment with no strong directional bias.",
+      "knowledge_refs": [
+        "crypto:25"
+      ]
+    },
+    {
+      "value": "techmeter: An enum with values 'Buy', 'Sell', or 'Hold'. 'Buy' indicates technical indicators suggest purchasing the asset. 'Sell' indicates technical indicators suggest selling the asset. 'Hold' indicates technical indicators suggest maintaining current positions without new trades.",
+      "knowledge_refs": [
+        "crypto:26"
+      ]
+    },
+    {
+      "value": "whalemotion: An enum with values 'Low', 'Medium', or 'High'. 'Low' indicates minimal activity from large traders. 'Medium' indicates moderate activity from large traders. 'High' indicates significant activity from large traders, potentially signaling important market movements.",
+      "knowledge_refs": [
+        "crypto:27"
+      ]
+    },
+    {
+      "value": "makermotion: An enum with values 'Low', 'Medium', or 'High'. 'Low' indicates minimal market maker activity with potentially wider spreads. 'Medium' indicates normal market maker activity. 'High' indicates substantial market maker activity, typically resulting in tighter spreads and higher liquidity.",
+      "knowledge_refs": [
+        "crypto:28"
+      ]
+    },
+    {
+      "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+      "knowledge_refs": [
+        "crypto:29"
+      ]
+    },
+    {
+      "value": "Risk-Adjusted Return: Risk-Adjusted Return = \\frac{realline}{PVaR \\times posriskrate}, \\text{where } realline \\text{ is the realized PnL, } PVaR \\text{ is the Position Value at Risk, and } posriskrate \\text{ is the position risk ratio.}",
+      "knowledge_refs": [
+        "crypto:30"
+      ]
+    },
+    {
+      "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+      "knowledge_refs": [
+        "crypto:31"
+      ]
+    },
+    {
+      "value": "Order Book Imbalance Ratio: Order Book Imbalance Ratio = \\frac{biddepth - askdepth}{biddepth + askdepth}, \\text{where } biddepth \\text{ is the deeper bid liquidity and } askdepth \\text{ is the deeper ask liquidity. A positive Imbalance Ratio indicates stronger buying pressure, while negative indicates stronger selling pressure.",
+      "knowledge_refs": [
+        "crypto:32"
+      ]
+    },
+    {
+      "value": "Effective Leverage: Effective Leverage = posmagn \\times \\frac{possum}{walletsum}, \\text{where } posmagn \\text{ is the position leverage, } possum \\text{ is the notional value of position, and } walletsum \\text{ is the total wallet balance.}",
+      "knowledge_refs": [
+        "crypto:33"
+      ]
+    },
+    {
+      "value": "Profit Factor: Profit Factor = \\frac{\\sum positive\\ realline}{|\\sum negative\\ realline|}, \\text{where } realline \\text{ is the realized PnL, calculated separately for positive and negative values.}",
+      "knowledge_refs": [
+        "crypto:34"
+      ]
+    },
+    {
+      "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+      "knowledge_refs": [
+        "crypto:35"
+      ]
+    },
+    {
+      "value": "Market Depth Ratio: Market Depth Ratio = \\frac{biddepth \\text{ or } askdepth}{dealcount} \\times Liquidity Ratio, \\text{where } biddepth/askdepth \\text{ is used depending on position direction (posedge), } dealcount \\text{ is the order quantity, and } Liquidity Ratio \\text{ measures available liquidity to total market volume.}",
+      "knowledge_refs": [
+        "crypto:36"
+      ]
+    },
+    {
+      "value": "Volatility-Adjusted Spread: Volatility-Adjusted Spread = \\frac{Spread Percentage}{volmeter \\times 0.1}, \\text{where } Spread Percentage \\text{ is the spread as percentage of midpoint price and } volmeter \\text{ is the volatility or fluctuation rating.}",
+      "knowledge_refs": [
+        "crypto:37"
+      ]
+    },
+    {
+      "value": "Risk-to-Reward Ratio: Risk-to-Reward Ratio = \\frac{|entryquote - (posedge == 'Long' ? stopquote : trigquote)|}{|entryquote - (posedge == 'Long' ? trigquote : stopquote)|}, \\text{where } entryquote \\text{ is the entry price, } stopquote \\text{ is the stop price, } trigquote \\text{ is the advanced trigger price, and } posedge \\text{ determines position direction (Long or Short).}",
+      "knowledge_refs": [
+        "crypto:38"
+      ]
+    },
+    {
+      "value": "Technical Signal Strength: Technical Signal Strength = \\frac{|rsi14spot - 50| + |macdtrail| + (bbandspan \\times 0.01)}{3} \\times (techmeter == 'Buy' ? 1 : techmeter == 'Sell' ? -1 : 0), \\text{where } rsi14spot \\text{ is the RSI indicator, } macdtrail \\text{ is the MACD line, } bbandspan \\text{ is the Bollinger Band width, and } techmeter \\text{ determines direction (Buy, Sell, Hold).}",
+      "knowledge_refs": [
+        "crypto:39"
+      ]
+    },
+    {
+      "value": "High-Quality Arbitrage Opportunity: An Arbitrage Window where the Arbitrage ROI exceeds 0.5% and the Market Efficiency Ratio is less than 1.2, indicating high potential return with low execution risk.",
+      "knowledge_refs": [
+        "crypto:41"
+      ]
+    },
+    {
+      "value": "Liquidity Constrained Position: A position where the Market Depth Ratio is less than 2.0, indicating that the position size is large relative to available market depth, potentially leading to significant slippage upon exit.",
+      "knowledge_refs": [
+        "crypto:43"
+      ]
+    },
+    {
+      "value": "Risk-Efficient Position: A position where the Risk-Adjusted Return exceeds 1.5 and the Risk-to-Reward Ratio is less than 0.5, indicating strong returns relative to risk exposure and favorable potential profit compared to potential loss.",
+      "knowledge_refs": [
+        "crypto:45"
+      ]
+    },
+    {
+      "value": "Liquidation Cascade Risk: Market conditions where more than 15% of open positions are classified as Liquidation Risk Level 'High Risk' and the Order Book Imbalance Ratio exceeds 0.3 in absolute value, indicating concentrated risk and imbalanced liquidity.",
+      "knowledge_refs": [
+        "crypto:47"
+      ]
+    },
+    {
+      "value": "Perfect Technical Setup: Market conditions where Technical Signal Strength exceeds 7, the techmeter direction matches mktfeel sentiment direction, and no Momentum Divergence is present, indicating strong, consistent technical signals.",
+      "knowledge_refs": [
+        "crypto:48"
+      ]
+    },
+    {
+      "value": "Smart Money Accuracy: The proportion of times the Smart Money Flow direction matches the 4-hour price movement direction, calculated as: $$ \\frac{\\text{COUNT(CASE WHEN (smartforce > retailflow AND smartforce > instflow AND next\\_price\\_4h > mid\\_price) OR (smartforce < retailflow AND smartforce < instflow AND next\\_price\\_4h < mid\\_price) THEN 1 ELSE 0 END)}}{\\text{COUNT(*)}} $$",
+      "knowledge_refs": [
+        "crypto:51"
+      ]
+    }
+  ],
+  "classification_rules": [
+    {
+      "value": "Liquidation Risk Level: Positions are categorized as 'Safe', 'Moderate', or 'High Risk' based on how close the current market price is to the liqquote (liquidation price). A position is 'High Risk' when market price is within 5% of liqquote.",
+      "knowledge_refs": [
+        "crypto:11"
+      ]
+    },
+    {
+      "value": "Over-Leveraged Position: A position where the leverage (posmagn) multiplied by the volatility measure (volmeter) exceeds 500, indicating high risk exposure.",
+      "knowledge_refs": [
+        "crypto:13"
+      ]
+    },
+    {
+      "value": "Market Maker Activity: Market conditions where exectune is predominantly 'Maker' and makermotion is 'High', indicating strong liquidity provision by market makers.",
+      "knowledge_refs": [
+        "crypto:14"
+      ]
+    },
+    {
+      "value": "Smart Money Flow: Market conditions where smartforce exceeds both retailflow and instflow by at least 20%, indicating strong directional bias from sophisticated traders.",
+      "knowledge_refs": [
+        "crypto:15"
+      ]
+    },
+    {
+      "value": "Liquidity Crisis: Market conditions where the Liquidity Ratio falls below 0.01, indicating insufficient market depth relative to typical trading volume.",
+      "knowledge_refs": [
+        "crypto:16"
+      ]
+    },
+    {
+      "value": "Momentum Divergence: Market condition where price makes new highs/lows while momentum indicators (buyforce, sellforce) move in the opposite direction.",
+      "knowledge_refs": [
+        "crypto:17"
+      ]
+    },
+    {
+      "value": "Technical Breakout: Market condition where price exceeds the highspotday or falls below lowspotday with volume (volday) at least 50% above the 30-day average.",
+      "knowledge_refs": [
+        "crypto:19"
+      ]
+    },
+    {
+      "value": "orderflow: An enum with values 'New', 'PartiallyFilled', 'Cancelled', or 'Filled'. 'New' indicates a newly placed order that hasn't been matched. 'PartiallyFilled' means some portion has been executed but not all. 'Cancelled' means the order was cancelled before full execution. 'Filled' means the order has been completely executed.",
+      "knowledge_refs": [
+        "crypto:21"
+      ]
+    },
+    {
+      "value": "whalemotion: An enum with values 'Low', 'Medium', or 'High'. 'Low' indicates minimal activity from large traders. 'Medium' indicates moderate activity from large traders. 'High' indicates significant activity from large traders, potentially signaling important market movements.",
+      "knowledge_refs": [
+        "crypto:27"
+      ]
+    },
+    {
+      "value": "makermotion: An enum with values 'Low', 'Medium', or 'High'. 'Low' indicates minimal market maker activity with potentially wider spreads. 'Medium' indicates normal market maker activity. 'High' indicates substantial market maker activity, typically resulting in tighter spreads and higher liquidity.",
+      "knowledge_refs": [
+        "crypto:28"
+      ]
+    },
+    {
+      "value": "High-Quality Arbitrage Opportunity: An Arbitrage Window where the Arbitrage ROI exceeds 0.5% and the Market Efficiency Ratio is less than 1.2, indicating high potential return with low execution risk.",
+      "knowledge_refs": [
+        "crypto:41"
+      ]
+    },
+    {
+      "value": "Optimal Trading Window: Market conditions where the Volatility-Adjusted Spread is less than 1.0 and the Market Maker Activity indicates 'High', suggesting tight spreads relative to volatility and strong liquidity provision.",
+      "knowledge_refs": [
+        "crypto:44"
+      ]
+    },
+    {
+      "value": "Whale-Driven Market: Market conditions where whalemotion is 'High' and there is at least one Whale Order in the same direction as the Smart Money Flow, indicating coordinated activity among large market participants.",
+      "knowledge_refs": [
+        "crypto:46"
+      ]
+    },
+    {
+      "value": "Liquidation Cascade Risk: Market conditions where more than 15% of open positions are classified as Liquidation Risk Level 'High Risk' and the Order Book Imbalance Ratio exceeds 0.3 in absolute value, indicating concentrated risk and imbalanced liquidity.",
+      "knowledge_refs": [
+        "crypto:47"
+      ]
+    },
+    {
+      "value": "Flow Dominance: Categorized as 'Smart Money Dominant' when smartforce > retail_flow * 1.2 AND smartforce > inst_flow * 1.2; 'Retail Dominant' when retail_flow > smartforce * 1.2 AND retail_flow > inst_flow * 1.2; 'Institutional Dominant' when inst_flow > smartforce * 1.2 AND inst_flow > retail_flow * 1.2; otherwise 'Mixed'.",
+      "knowledge_refs": [
+        "crypto:50"
+      ]
+    },
+    {
+      "value": "Smart Money Accuracy: The proportion of times the Smart Money Flow direction matches the 4-hour price movement direction, calculated as: $$ \\frac{\\text{COUNT(CASE WHEN (smartforce > retailflow AND smartforce > instflow AND next\\_price\\_4h > mid\\_price) OR (smartforce < retailflow AND smartforce < instflow AND next\\_price\\_4h < mid\\_price) THEN 1 ELSE 0 END)}}{\\text{COUNT(*)}} $$",
+      "knowledge_refs": [
+        "crypto:51"
+      ]
+    },
+    {
+      "value": "Effective Leverage Risk Classification: A position is labeled as 'High Risk' if its Effective Leverage exceeds 20, otherwise as 'Normal'.",
+      "knowledge_refs": [
+        "crypto:52"
+      ]
+    }
+  ],
+  "table_structure": {
+    "users": {
+      "primary_key": [
+        "usersnode"
+      ],
+      "foreign_keys": []
+    },
+    "riskandmargin": {
+      "primary_key": [
+        "riskandmarginpivot"
+      ],
+      "foreign_keys": [
+        {
+          "from_columns": [
+            "ordervault"
+          ],
+          "to_table": "orders",
+          "to_columns": [
+            "recordvault"
+          ],
+          "cardinality": "many_to_one",
+          "nullable": true,
+          "join_condition": "riskandmargin.ordervault = orders.recordvault"
+        }
+      ]
+    },
+    "orders": {
+      "primary_key": [
+        "orderspivot"
+      ],
+      "foreign_keys": [
+        {
+          "from_columns": [
+            "userlink"
+          ],
+          "to_table": "users",
+          "to_columns": [
+            "userstamp"
+          ],
+          "cardinality": "many_to_one",
+          "nullable": true,
+          "join_condition": "orders.userlink = users.userstamp"
+        }
+      ]
+    },
+    "accountbalances": {
+      "primary_key": [
+        "accountbalancesnode"
+      ],
+      "foreign_keys": [
+        {
+          "from_columns": [
+            "usertag"
+          ],
+          "to_table": "users",
+          "to_columns": [
+            "userstamp"
+          ],
+          "cardinality": "many_to_one",
+          "nullable": true,
+          "join_condition": "accountbalances.usertag = users.userstamp"
+        }
+      ]
+    },
+    "orderexecutions": {
+      "primary_key": [
+        "orderexecmark"
+      ],
+      "foreign_keys": [
+        {
+          "from_columns": [
+            "ordersmark"
+          ],
+          "to_table": "orders",
+          "to_columns": [
+            "recordvault"
+          ],
+          "cardinality": "many_to_one",
+          "nullable": true,
+          "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+        }
+      ]
+    },
+    "systemmonitoring": {
+      "primary_key": [
+        "systemmonitoringpivot"
+      ],
+      "foreign_keys": [
+        {
+          "from_columns": [
+            "aitrack"
+          ],
+          "to_table": "analyticsindicators",
+          "to_columns": [
+            "analyticsindicatorsnode"
+          ],
+          "cardinality": "many_to_one",
+          "nullable": true,
+          "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+        }
+      ]
+    },
+    "fees": {
+      "primary_key": [
+        "feesnode"
+      ],
+      "foreign_keys": [
+        {
+          "from_columns": [
+            "orderslink"
+          ],
+          "to_table": "orders",
+          "to_columns": [
+            "recordvault"
+          ],
+          "cardinality": "many_to_one",
+          "nullable": true,
+          "join_condition": "fees.orderslink = orders.recordvault"
+        }
+      ]
+    },
+    "marketdata": {
+      "primary_key": [
+        "marketdatanode"
+      ],
+      "foreign_keys": []
+    },
+    "marketstats": {
+      "primary_key": [
+        "marketstatsmark"
+      ],
+      "foreign_keys": [
+        {
+          "from_columns": [
+            "mdlink"
+          ],
+          "to_table": "marketdata",
+          "to_columns": [
+            "marketdatanode"
+          ],
+          "cardinality": "many_to_one",
+          "nullable": true,
+          "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+        }
+      ]
+    },
+    "analyticsindicators": {
+      "primary_key": [
+        "analyticsindicatorsnode"
+      ],
+      "foreign_keys": [
+        {
+          "from_columns": [
+            "mdataref"
+          ],
+          "to_table": "marketdata",
+          "to_columns": [
+            "marketdatanode"
+          ],
+          "cardinality": "many_to_one",
+          "nullable": true,
+          "join_condition": "analyticsindicators.mdataref = marketdata.marketdatanode"
+        },
+        {
+          "from_columns": [
+            "mstatsref"
+          ],
+          "to_table": "marketstats",
+          "to_columns": [
+            "marketstatsmark"
+          ],
+          "cardinality": "many_to_one",
+          "nullable": true,
+          "join_condition": "analyticsindicators.mstatsref = marketstats.marketstatsmark"
+        }
+      ]
+    }
+  },
+  "disambiguation_rules": [
+    {
+      "value": "Resolve the term 'price gap percentage' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'sort' as a sort_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'completion rate' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'some recent executions' as a semantic_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'top few positions' as a semantic_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'value' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'current market volatility' as a semantic_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'join' as a join_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'Position Value at Risk (PVaR)' as a knowledge_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": [
+        "crypto:2"
+      ]
+    },
+    {
+      "value": "Resolve the term 'risk profile ID' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'related order' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'margin requirement' as a lexical_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'margin usage' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'relevant indicators' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'profit ratio' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'null' as a null_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'Profit Factor' as a knowledge_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": [
+        "crypto:34"
+      ]
+    },
+    {
+      "value": "Resolve the term 'spread' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'mood' as a lexical_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'smart trading' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'price shifts' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'flow category' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'success rate' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'Flow Dominance' as a knowledge_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": [
+        "crypto:50"
+      ]
+    },
+    {
+      "value": "Resolve the term 'leverage' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'position value' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'account balance' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'Signal Strength' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'relevant technical value' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'significant trades' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'order reference' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'Whale Order' as a knowledge_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": [
+        "crypto:10"
+      ]
+    },
+    {
+      "value": "Resolve the term 'status' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'orderflow' as a knowledge_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": [
+        "crypto:21"
+      ]
+    },
+    {
+      "value": "Resolve the term 'leverage scale' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'balance' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'how leveraged the position is' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'impact cost' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'Market Impact Cost (MIC)' as a knowledge_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": [
+        "crypto:4"
+      ]
+    },
+    {
+      "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'reference' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'market records' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'JSON column' as a schema_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": []
+    },
+    {
+      "value": "Resolve the term 'Spread Percentage' as a knowledge_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+      "knowledge_refs": [
+        "crypto:0"
+      ]
+    }
+  ],
+  "known_discrepancies": [],
+  "tables": [
+    {
+      "table_id": "crypto:users",
+      "table_name": "users",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "usersnode"
+          ],
+          "foreign_keys": []
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:users:usersnode",
+          "column_name": "usersnode",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL primary key uniquely identifying each user (e.g., 1001).",
+          "metadata": {
+            "column_identity_references": [
+              {
+                "value": "usersnode identifies or references a row in users. A BIGSERIAL primary key uniquely identifying each user (e.g., 1001).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "usersnode"
+              ],
+              "foreign_keys": []
+            }
+          }
+        },
+        {
+          "column_id": "crypto:users:userstamp",
+          "column_name": "userstamp",
+          "column_type": "character",
+          "description": "A CHAR(36) UUID linking to external/client user references (e.g., 'e3bd1f12-3e93-4b3c-a9f3-84be2593a6d7').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=U100135                             ; max=U999356                             ",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "usersnode"
+              ],
+              "foreign_keys": []
+            }
+          }
+        },
+        {
+          "column_id": "crypto:users:acctscope",
+          "column_name": "acctscope",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (AcctScope_enum) indicating the account scope (Margin, Spot, Options, Futures).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=Margin; max=Futures",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "usersnode"
+              ],
+              "foreign_keys": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "table_id": "crypto:riskandmargin",
+      "table_name": "riskandmargin",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "riskandmarginpivot"
+          ],
+          "foreign_keys": [
+            {
+              "from_columns": [
+                "ordervault"
+              ],
+              "to_table": "orders",
+              "to_columns": [
+                "recordvault"
+              ],
+              "cardinality": "many_to_one",
+              "nullable": true,
+              "join_condition": "riskandmargin.ordervault = orders.recordvault"
+            }
+          ]
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:riskandmargin:riskandmarginpivot",
+          "column_name": "riskandmarginpivot",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL PK for risk/margin records (e.g., 444444).",
+          "metadata": {
+            "column_identity_references": [
+              {
+                "value": "riskandmarginpivot identifies or references a row in riskandmargin. A BIGSERIAL PK for risk/margin records (e.g., 444444).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "riskandmarginpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordervault"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "riskandmargin.ordervault = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:riskandmargin:ordervault",
+          "column_name": "ordervault",
+          "column_type": "character",
+          "description": "A CHAR(36) FK referencing Orders(RecordVault).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=OB100239                            ; max=OB999146                            ",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "riskandmarginpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordervault"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "riskandmargin.ordervault = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:riskandmargin:risk_margin_profile",
+          "column_name": "risk_margin_profile",
+          "column_type": "jsonb",
+          "description": "JSONB column. Bundles leverage settings, margin thresholds, liquidation levels, iceberg layout, multifaceted risk labels, position sizing, margin‑call figures, and collateral details into one field for rapid risk evaluation.",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min={\"iceberg\": {\"viscount\": 0.00564, \"icebcount\": 0.001644}, \"leverage\": {\"levscale\": \"20\", \"margform\": \"Isolated\"}, \"position\": {\"possum\": 1639542.820, \"posedge\": \"Short\", \"posmagn\": \"10\", \"poscount\": 97.528, \"posriskrate\": 0.521}, \"collateral\": {\"collsum\": 47678.940, \"collcoin\": \"ETH\", \"collrate\": 0.898, \"insfundshare\": 25.970}, \"margin_rates\": {\"margrate\": 0.781, \"bkptquote\": 15015.650, \"margcallquote\": 25079.430}, \"price_levels\": {\"liqquote\": 10477.310, \"stopquote\": 15779.580, \"traildiff\": 0.016, \"trigquote\": 16288.900}, \"risk_factors\": {\"cpfactor\": \"0.065\", \"liqfactor\": \"0.191\", \"netfactor\": \"0.22\", \"regfactor\": \"0.915\", \"setfactor\": \"0.498\", \"custfactor\": \"0.612\"}, \"margin_thresholds\": {\"inithold\": 6.120, \"mainthold\": 3.060}}; max={\"iceberg\": {\"viscount\": 8.894291, \"icebcount\": 1.023646}, \"leverage\": {\"levscale\": \"3\", \"margform\": \"Isolated\"}, \"position\": {\"possum\": 1785031.570, \"posedge\": null, \"posmagn\": \"20\", \"poscount\": 90.138, \"posriskrate\": 0.816}, \"collateral\": {\"collsum\": 490583.060, \"collcoin\": \"USDT\", \"collrate\": 0.256, \"insfundshare\": 65.090}, \"margin_rates\": {\"margrate\": 0.597, \"bkptquote\": 34175.790, \"margcallquote\": 21743.100}, \"price_levels\": {\"liqquote\": 13440.200, \"stopquote\": 20692.870, \"traildiff\": 0.047, \"trigquote\": 18292.570}, \"risk_factors\": {\"cpfactor\": \"0.837\", \"liqfactor\": \"0.8\", \"netfactor\": \"0.077\", \"regfactor\": \"0.647\", \"setfactor\": \"0.404\", \"custfactor\": \"0.731\"}, \"margin_thresholds\": {\"inithold\": 65469.390, \"mainthold\": 32734.690}}",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "riskandmarginpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordervault"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "riskandmargin.ordervault = orders.recordvault"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "table_id": "crypto:orders",
+      "table_name": "orders",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "orderspivot"
+          ],
+          "foreign_keys": [
+            {
+              "from_columns": [
+                "userlink"
+              ],
+              "to_table": "users",
+              "to_columns": [
+                "userstamp"
+              ],
+              "cardinality": "many_to_one",
+              "nullable": true,
+              "join_condition": "orders.userlink = users.userstamp"
+            }
+          ]
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:orders:orderspivot",
+          "column_name": "orderspivot",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL primary key uniquely identifying each order (e.g., 15002).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [
+              {
+                "value": "orderspivot identifies or references a row in orders. A BIGSERIAL primary key uniquely identifying each order (e.g., 15002).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:recordvault",
+          "column_name": "recordvault",
+          "column_type": "character",
+          "description": "A CHAR(36) unique order reference (e.g., '58d9c141-7f13-4cd3-ba93-f520bf922f7c').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=OB100239                            ; max=OB999146                            ",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:timecode",
+          "column_name": "timecode",
+          "column_type": "timestamp without time zone",
+          "description": "A TIMESTAMP recording order creation (e.g., '2025-05-10 13:45:00').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=2025-02-19 08:29:46.049442; max=2025-02-19 08:29:46.132317",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:exchspot",
+          "column_name": "exchspot",
+          "column_type": "character",
+          "description": "A CHAR(10) referencing the exchange ID (e.g., 'BINANCE').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=EX101     ; max=EX999     ",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:mktnote",
+          "column_name": "mktnote",
+          "column_type": "character varying",
+          "description": "A VARCHAR(30) naming the market pair or trading symbol (e.g., 'BTC/USDT').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=ADA-USD; max=SOL-USDT",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:orderstamp",
+          "column_name": "orderstamp",
+          "column_type": "character",
+          "description": "A CHAR(36) external or client order ID (e.g., 'CL-3c4a8f89-9aed').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=OR1042052                           ; max=OR9981284                           ",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:userlink",
+          "column_name": "userlink",
+          "column_type": "character",
+          "description": "A CHAR(36) FK to Users(UserStamp), linking this order to its owner.",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=U100135                             ; max=U999356                             ",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:ordertune",
+          "column_name": "ordertune",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (OrderTune_enum) describing order type (Stop, Market, Limit, StopLimit).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=Stop; max=StopLimit",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:dealedge",
+          "column_name": "dealedge",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (DealEdge_enum) indicating side (Sell, Buy).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "dealedge: An enum with values 'Buy' or 'Sell'. 'Buy' indicates the order is to purchase the base asset using the quote asset (e.g., buying BTC with USDT). 'Sell' indicates the order is to sell the base asset for the quote asset (e.g., selling BTC for USDT).",
+                "knowledge_refs": [
+                  "crypto:20"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=Sell; max=Buy",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:dealquote",
+          "column_name": "dealquote",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) capturing the limit or stop price (e.g., '27800.500').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Impact Cost (MIC): MIC = dealcount \\times dealquote \\times mkteffect \\times 0.01, \\text{where } dealcount \\text{ is the order quantity, } dealquote \\text{ is the limit or stop price, and } mkteffect \\text{ is the approximating internal market impact.}",
+                "knowledge_refs": [
+                  "crypto:4"
+                ]
+              },
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              },
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+                "knowledge_refs": [
+                  "crypto:35"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=120.670; max=49969.320",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:dealcount",
+          "column_name": "dealcount",
+          "column_type": "numeric",
+          "description": "A NUMERIC(12,4) for the order quantity (e.g., '0.1250').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Slippage Impact: Slippage Impact = \\frac{dealcount}{bidunits \\text{ or } askunits} \\times spreadband, \\text{where } dealcount \\text{ is the order quantity, } bidunits/askunits \\text{ is the quantity available at best bid/ask, and } spreadband \\text{ is the raw spread.}",
+                "knowledge_refs": [
+                  "crypto:1"
+                ]
+              },
+              {
+                "value": "Market Impact Cost (MIC): MIC = dealcount \\times dealquote \\times mkteffect \\times 0.01, \\text{where } dealcount \\text{ is the order quantity, } dealquote \\text{ is the limit or stop price, and } mkteffect \\text{ is the approximating internal market impact.}",
+                "knowledge_refs": [
+                  "crypto:4"
+                ]
+              },
+              {
+                "value": "Order Fill Rate: Order Fill Rate = \\frac{dealcount - remaincount}{dealcount} \\times 100, \\text{where } dealcount \\text{ is the order quantity and } remaincount \\text{ is how many units remain unfilled.}",
+                "knowledge_refs": [
+                  "crypto:8"
+                ]
+              },
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              },
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Market Depth Ratio: Market Depth Ratio = \\frac{biddepth \\text{ or } askdepth}{dealcount} \\times Liquidity Ratio, \\text{where } biddepth/askdepth \\text{ is used depending on position direction (posedge), } dealcount \\text{ is the order quantity, and } Liquidity Ratio \\text{ measures available liquidity to total market volume.}",
+                "knowledge_refs": [
+                  "crypto:36"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=0.0073; max=9.9825",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:notionsum",
+          "column_name": "notionsum",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) notional value (price × quantity) (e.g., '3475.063').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=83.400; max=482910.410",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:orderflow",
+          "column_name": "orderflow",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (OrderFlow_enum) describing the status (New, PartiallyFilled, Cancelled, Filled).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "orderflow: An enum with values 'New', 'PartiallyFilled', 'Cancelled', or 'Filled'. 'New' indicates a newly placed order that hasn't been matched. 'PartiallyFilled' means some portion has been executed but not all. 'Cancelled' means the order was cancelled before full execution. 'Filled' means the order has been completely executed.",
+                "knowledge_refs": [
+                  "crypto:21"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [
+              {
+                "value": "orderflow: An enum with values 'New', 'PartiallyFilled', 'Cancelled', or 'Filled'. 'New' indicates a newly placed order that hasn't been matched. 'PartiallyFilled' means some portion has been executed but not all. 'Cancelled' means the order was cancelled before full execution. 'Filled' means the order has been completely executed.",
+                "knowledge_refs": [
+                  "crypto:21"
+                ]
+              }
+            ],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'orderflow' as a knowledge_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": [
+                  "crypto:21"
+                ]
+              },
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=New; max=Filled",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:timespan",
+          "column_name": "timespan",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (TimeSpan_enum) for time-in-force (IOC, GTC, GTD, FOK).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "timespan: An enum with values 'IOC', 'GTC', 'GTD', or 'FOK'. 'IOC' (Immediate-or-Cancel) means execute immediately available portion or cancel. 'GTC' (Good-Till-Cancelled) means the order remains active until explicitly cancelled. 'GTD' (Good-Till-Date) means the order remains active until a specified date. 'FOK' (Fill-or-Kill) means execute completely immediately or cancel entirely.",
+                "knowledge_refs": [
+                  "crypto:22"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=IOC; max=FOK",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:orderbase",
+          "column_name": "orderbase",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (OrderBase_enum) indicating how the order was placed (API, Web, Mobile, Bot).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=API; max=Bot",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:clientmark",
+          "column_name": "clientmark",
+          "column_type": "character varying",
+          "description": "A VARCHAR(80) holding an optional client-supplied tag (e.g., 'myXtrOrder001').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=CL1006225; max=CL9995286",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:createspot",
+          "column_name": "createspot",
+          "column_type": "timestamp without time zone",
+          "description": "A TIMESTAMP showing when the order was first persisted (e.g., '2025-05-10 13:45:00').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=2025-02-18 08:32:36.110719; max=2025-02-19 08:28:02.049442",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orders:updatespot",
+          "column_name": "updatespot",
+          "column_type": "timestamp without time zone",
+          "description": "A TIMESTAMP noting the last update to this order (e.g., '2025-05-10 14:02:15').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              },
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [
+              {
+                "value": "Resolve the term 'new orders' as a intent_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              },
+              {
+                "value": "Resolve the term 'large orders' as a knowledge_linking_ambiguity ambiguity; confirm the intended meaning before writing SQL.",
+                "knowledge_refs": []
+              }
+            ],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=2025-02-19 08:29:46.049442; max=2025-02-19 08:29:46.132317",
+            "table_structure": {
+              "primary_key": [
+                "orderspivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "userlink"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orders.userlink = users.userstamp"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "table_id": "crypto:accountbalances",
+      "table_name": "accountbalances",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "accountbalancesnode"
+          ],
+          "foreign_keys": [
+            {
+              "from_columns": [
+                "usertag"
+              ],
+              "to_table": "users",
+              "to_columns": [
+                "userstamp"
+              ],
+              "cardinality": "many_to_one",
+              "nullable": true,
+              "join_condition": "accountbalances.usertag = users.userstamp"
+            }
+          ]
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:accountbalances:accountbalancesnode",
+          "column_name": "accountbalancesnode",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL PK for each balance record (e.g., 88888).",
+          "metadata": {
+            "column_identity_references": [
+              {
+                "value": "accountbalancesnode identifies or references a row in accountbalances. A BIGSERIAL PK for each balance record (e.g., 88888).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "accountbalancesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "usertag"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "accountbalances.usertag = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:accountbalances:walletsum",
+          "column_name": "walletsum",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) total wallet balance (e.g., '1500.500').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Effective Leverage: Effective Leverage = posmagn \\times \\frac{possum}{walletsum}, \\text{where } posmagn \\text{ is the position leverage, } possum \\text{ is the notional value of position, and } walletsum \\text{ is the total wallet balance.}",
+                "knowledge_refs": [
+                  "crypto:33"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=219.750; max=999952.780",
+            "table_structure": {
+              "primary_key": [
+                "accountbalancesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "usertag"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "accountbalances.usertag = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:accountbalances:availsum",
+          "column_name": "availsum",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) freely available portion (e.g., '1000.250').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=58.650; max=983939.500",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "accountbalancesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "usertag"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "accountbalances.usertag = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:accountbalances:frozensum",
+          "column_name": "frozensum",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) locked/frozen portion (e.g., '500.250').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=161.100; max=985289.710",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "accountbalancesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "usertag"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "accountbalances.usertag = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:accountbalances:margsum",
+          "column_name": "margsum",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) margin account balance (e.g., '2000.000').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Margin Utilization: Margin Utilization = \\frac{inithold}{margsum} \\times 100, \\text{where } inithold \\text{ is the initial margin required and } margsum \\text{ is the margin account balance.}",
+                "knowledge_refs": [
+                  "crypto:7"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=1024.900; max=999451.160",
+            "table_structure": {
+              "primary_key": [
+                "accountbalancesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "usertag"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "accountbalances.usertag = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:accountbalances:unrealline",
+          "column_name": "unrealline",
+          "column_type": "double precision",
+          "description": "A DOUBLE PRECISION unrealized PNL (e.g., 120.75).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=-99974.43; max=99772.21",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "accountbalancesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "usertag"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "accountbalances.usertag = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:accountbalances:realline",
+          "column_name": "realline",
+          "column_type": "double precision",
+          "description": "A DOUBLE PRECISION realized PNL (e.g., -45.25).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Realized Risk Ratio (RRR): RRR = \\frac{realline}{PVaR}, \\text{where } realline \\text{ is the realized PnL and } PVaR \\text{ is the Position Value at Risk.}",
+                "knowledge_refs": [
+                  "crypto:6"
+                ]
+              },
+              {
+                "value": "Risk-Adjusted Return: Risk-Adjusted Return = \\frac{realline}{PVaR \\times posriskrate}, \\text{where } realline \\text{ is the realized PnL, } PVaR \\text{ is the Position Value at Risk, and } posriskrate \\text{ is the position risk ratio.}",
+                "knowledge_refs": [
+                  "crypto:30"
+                ]
+              },
+              {
+                "value": "Profit Factor: Profit Factor = \\frac{\\sum positive\\ realline}{|\\sum negative\\ realline|}, \\text{where } realline \\text{ is the realized PnL, calculated separately for positive and negative values.}",
+                "knowledge_refs": [
+                  "crypto:34"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=-99813.64; max=99925.71",
+            "table_structure": {
+              "primary_key": [
+                "accountbalancesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "usertag"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "accountbalances.usertag = users.userstamp"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:accountbalances:usertag",
+          "column_name": "usertag",
+          "column_type": "character",
+          "description": "A CHAR(36) FK referencing Users(UserStamp).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=U100135                             ; max=U999356                             ",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "accountbalancesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "usertag"
+                  ],
+                  "to_table": "users",
+                  "to_columns": [
+                    "userstamp"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "accountbalances.usertag = users.userstamp"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "table_id": "crypto:orderexecutions",
+      "table_name": "orderexecutions",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "orderexecmark"
+          ],
+          "foreign_keys": [
+            {
+              "from_columns": [
+                "ordersmark"
+              ],
+              "to_table": "orders",
+              "to_columns": [
+                "recordvault"
+              ],
+              "cardinality": "many_to_one",
+              "nullable": true,
+              "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+            }
+          ]
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:orderexecutions:orderexecmark",
+          "column_name": "orderexecmark",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL primary key for each fill/execution (e.g., 210345).",
+          "metadata": {
+            "column_identity_references": [
+              {
+                "value": "orderexecmark identifies or references a row in orderexecutions. A BIGSERIAL primary key for each fill/execution (e.g., 210345).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "orderexecmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordersmark"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orderexecutions:fillcount",
+          "column_name": "fillcount",
+          "column_type": "numeric",
+          "description": "A DECIMAL(8,4) showing how many units were filled (e.g., '0.0500').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=0.0000; max=9.8168",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "orderexecmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordersmark"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orderexecutions:remaincount",
+          "column_name": "remaincount",
+          "column_type": "numeric",
+          "description": "A NUMERIC(8,4) showing how many units remain unfilled (e.g., '0.0750').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Order Fill Rate: Order Fill Rate = \\frac{dealcount - remaincount}{dealcount} \\times 100, \\text{where } dealcount \\text{ is the order quantity and } remaincount \\text{ is how many units remain unfilled.}",
+                "knowledge_refs": [
+                  "crypto:8"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=0.0011; max=9.4193",
+            "table_structure": {
+              "primary_key": [
+                "orderexecmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordersmark"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orderexecutions:fillquote",
+          "column_name": "fillquote",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) capturing the fill price (e.g., '27699.150').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=120.910; max=52271.620",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "orderexecmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordersmark"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orderexecutions:fillsum",
+          "column_name": "fillsum",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) notional of the fill (e.g., '1384.958').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=0.020; max=421974.660",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "orderexecmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordersmark"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orderexecutions:expirespot",
+          "column_name": "expirespot",
+          "column_type": "timestamp without time zone",
+          "description": "A TIMESTAMP if the partial fill or order slice expires (e.g., '2025-05-10 15:00:00').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=2025-02-19 08:29:46.049442; max=2025-03-21 08:29:46.127597",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "orderexecmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordersmark"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orderexecutions:cancelnote",
+          "column_name": "cancelnote",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (CancelNote_enum) describing cancel reason (Expired, InsufficientFunds, UserRequested).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=Expired; max=UserRequested",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "orderexecmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordersmark"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orderexecutions:exectune",
+          "column_name": "exectune",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (ExecTune_enum) indicating execution style (Maker, Taker).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "exectune: An enum with values 'Maker' or 'Taker'. 'Maker' indicates the order added liquidity to the order book by not matching immediately. 'Taker' indicates the order removed liquidity from the order book by matching with existing orders immediately upon placement.",
+                "knowledge_refs": [
+                  "crypto:29"
+                ]
+              }
+            ],
+            "classification_rules": [
+              {
+                "value": "Market Maker Activity: Market conditions where exectune is predominantly 'Maker' and makermotion is 'High', indicating strong liquidity provision by market makers.",
+                "knowledge_refs": [
+                  "crypto:14"
+                ]
+              }
+            ],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=Maker; max=Taker",
+            "table_structure": {
+              "primary_key": [
+                "orderexecmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordersmark"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:orderexecutions:ordersmark",
+          "column_name": "ordersmark",
+          "column_type": "character",
+          "description": "A CHAR(36) referencing Orders(RecordVault) to link back to the original order.",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=OB100239                            ; max=OB999146                            ",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "orderexecmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "ordersmark"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "orderexecutions.ordersmark = orders.recordvault"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "table_id": "crypto:systemmonitoring",
+      "table_name": "systemmonitoring",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "systemmonitoringpivot"
+          ],
+          "foreign_keys": [
+            {
+              "from_columns": [
+                "aitrack"
+              ],
+              "to_table": "analyticsindicators",
+              "to_columns": [
+                "analyticsindicatorsnode"
+              ],
+              "cardinality": "many_to_one",
+              "nullable": true,
+              "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+            }
+          ]
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:systemmonitoring:systemmonitoringpivot",
+          "column_name": "systemmonitoringpivot",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL PK for system monitoring info (e.g., 56789).",
+          "metadata": {
+            "column_identity_references": [
+              {
+                "value": "systemmonitoringpivot identifies or references a row in systemmonitoring. A BIGSERIAL PK for system monitoring info (e.g., 56789).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:apireqtotal",
+          "column_name": "apireqtotal",
+          "column_type": "integer",
+          "description": "An INTEGER counting total API requests in a window (e.g., 45230).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=15; max=9988",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:apierrtotal",
+          "column_name": "apierrtotal",
+          "column_type": "integer",
+          "description": "An INTEGER total of API errors (e.g., 123).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=0; max=100",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:apilatmark",
+          "column_name": "apilatmark",
+          "column_type": "real",
+          "description": "A REAL capturing average API latency (e.g., 150.2).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1.0; max=1000.0",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:wsstate",
+          "column_name": "wsstate",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (WSState_enum) describing websocket state (Connected, Disconnected).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=Connected; max=Disconnected",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:rateremain",
+          "column_name": "rateremain",
+          "column_type": "smallint",
+          "description": "A SMALLINT for remaining requests before rate limit (e.g., 75).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=0; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:lastupdnote",
+          "column_name": "lastupdnote",
+          "column_type": "character varying",
+          "description": "A VARCHAR(60) short note on last system update (e.g., 'AutoScale triggered').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1024395; max=9988341",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:seqcode",
+          "column_name": "seqcode",
+          "column_type": "character varying",
+          "description": "A VARCHAR(60) sequence/version code for real-time updates (e.g., 'seq-0012').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1006368; max=9999688",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:slipratio",
+          "column_name": "slipratio",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) average slippage measure (e.g., '0.250').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Efficiency Ratio (MER): MER = \\frac{Slippage Impact}{slipratio}, \\text{where } Slippage Impact \\text{ is the calculated expected slippage and } slipratio \\text{ is the average slippage measure.}",
+                "knowledge_refs": [
+                  "crypto:9"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=-0.010; max=0.010",
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:exectimespan",
+          "column_name": "exectimespan",
+          "column_type": "numeric",
+          "description": "A DECIMAL(8,2) typical order execution time in ms or s (e.g., '12.50').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=2.00; max=999.00",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:queueline",
+          "column_name": "queueline",
+          "column_type": "integer",
+          "description": "An INTEGER tracking queued tasks or orders (e.g., 45).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=5; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:mkteffect",
+          "column_name": "mkteffect",
+          "column_type": "real",
+          "description": "A REAL approximating internal market impact (e.g., 1.2).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Market Impact Cost (MIC): MIC = dealcount \\times dealquote \\times mkteffect \\times 0.01, \\text{where } dealcount \\text{ is the order quantity, } dealquote \\text{ is the limit or stop price, and } mkteffect \\text{ is the approximating internal market impact.}",
+                "knowledge_refs": [
+                  "crypto:4"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=-0.01; max=0.01",
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:priceeffect",
+          "column_name": "priceeffect",
+          "column_type": "real",
+          "description": "A REAL approximating net price improvement (e.g., 0.4).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=0.0; max=0.01",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:systemmonitoring:aitrack",
+          "column_name": "aitrack",
+          "column_type": "bigint",
+          "description": "A BIGINT FK to AnalyticsIndicators(AnalyticsIndicatorsNode), linking to advanced analytics.",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "systemmonitoringpivot"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "aitrack"
+                  ],
+                  "to_table": "analyticsindicators",
+                  "to_columns": [
+                    "analyticsindicatorsnode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "systemmonitoring.aitrack = analyticsindicators.analyticsindicatorsnode"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "table_id": "crypto:fees",
+      "table_name": "fees",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "feesnode"
+          ],
+          "foreign_keys": [
+            {
+              "from_columns": [
+                "orderslink"
+              ],
+              "to_table": "orders",
+              "to_columns": [
+                "recordvault"
+              ],
+              "cardinality": "many_to_one",
+              "nullable": true,
+              "join_condition": "fees.orderslink = orders.recordvault"
+            }
+          ]
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:fees:feesnode",
+          "column_name": "feesnode",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL primary key for fee records (e.g., 30012).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+                "knowledge_refs": [
+                  "crypto:35"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [
+              {
+                "value": "feesnode identifies or references a row in fees. A BIGSERIAL primary key for fee records (e.g., 30012).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "table_structure": {
+              "primary_key": [
+                "feesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "orderslink"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "fees.orderslink = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:fees:feerange",
+          "column_name": "feerange",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (FeeRange_enum) describing the user's fee tier (Tier4, Tier1, Tier3, Tier2).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+                "knowledge_refs": [
+                  "crypto:35"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=Tier4; max=Tier2",
+            "table_structure": {
+              "primary_key": [
+                "feesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "orderslink"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "fees.orderslink = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:fees:feerate",
+          "column_name": "feerate",
+          "column_type": "numeric",
+          "description": "A DECIMAL(8,5) capturing fee percentage (e.g., '0.00050').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+                "knowledge_refs": [
+                  "crypto:35"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=0.00010; max=0.00200",
+            "table_structure": {
+              "primary_key": [
+                "feesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "orderslink"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "fees.orderslink = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:fees:feetotal",
+          "column_name": "feetotal",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,6) total fee charged (e.g., '0.250000').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+                "knowledge_refs": [
+                  "crypto:35"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=0.000010; max=688.601306",
+            "table_structure": {
+              "primary_key": [
+                "feesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "orderslink"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "fees.orderslink = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:fees:feecoin",
+          "column_name": "feecoin",
+          "column_type": "USER-DEFINED",
+          "description": "An enum (FeeCoin_enum) for the currency used to pay fees (USDC, USD, USDT).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+                "knowledge_refs": [
+                  "crypto:35"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=USDC; max=USDT",
+            "table_structure": {
+              "primary_key": [
+                "feesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "orderslink"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "fees.orderslink = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:fees:rebrate",
+          "column_name": "rebrate",
+          "column_type": "numeric",
+          "description": "A DECIMAL(8,5) capturing the maker rebate rate (e.g., '0.00015').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+                "knowledge_refs": [
+                  "crypto:35"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=0.00000; max=0.00100",
+            "table_structure": {
+              "primary_key": [
+                "feesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "orderslink"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "fees.orderslink = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:fees:rebtotal",
+          "column_name": "rebtotal",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,6) total rebate (e.g., '0.075000').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+                "knowledge_refs": [
+                  "crypto:35"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=0.000000; max=295.382262",
+            "table_structure": {
+              "primary_key": [
+                "feesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "orderslink"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "fees.orderslink = orders.recordvault"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:fees:orderslink",
+          "column_name": "orderslink",
+          "column_type": "character",
+          "description": "A CHAR(36) referencing Orders(RecordVault), linking fees to a specific order.",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "True Cost of Execution: True Cost of Execution = feetotal + (dealcount \\times dealquote \\times Slippage Impact \\times 0.01), \\text{where } feetotal \\text{ is the total fee charged and } Slippage Impact \\text{ is the expected price slippage impact for the order size.}",
+                "knowledge_refs": [
+                  "crypto:31"
+                ]
+              },
+              {
+                "value": "Arbitrage ROI: Arbitrage ROI = \\frac{AOS \\times dealquote}{feetotal \\times 2}, \\text{where } AOS \\text{ is the Arbitrage Opportunity Score and } feetotal \\text{ is multiplied by 2 to account for fees on both transactions involved in arbitrage.}",
+                "knowledge_refs": [
+                  "crypto:35"
+                ]
+              }
+            ],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=OB100239                            ; max=OB999146                            ",
+            "table_structure": {
+              "primary_key": [
+                "feesnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "orderslink"
+                  ],
+                  "to_table": "orders",
+                  "to_columns": [
+                    "recordvault"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "fees.orderslink = orders.recordvault"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "table_id": "crypto:marketdata",
+      "table_name": "marketdata",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "marketdatanode"
+          ],
+          "foreign_keys": []
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:marketdata:marketdatanode",
+          "column_name": "marketdatanode",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL PK identifying a market data snapshot (e.g., 987654).",
+          "metadata": {
+            "column_identity_references": [
+              {
+                "value": "marketdatanode identifies or references a row in marketdata. A BIGSERIAL PK identifying a market data snapshot (e.g., 987654).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketdatanode"
+              ],
+              "foreign_keys": []
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketdata:quote_depth_snapshot",
+          "column_name": "quote_depth_snapshot",
+          "column_type": "jsonb",
+          "description": "JSONB column. Captures a full market‑microstructure snapshot—best quotes, size, depth, spreads, and derived mid/mark/index prices—inside a single JSONB column.",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min={\"depth\": {\"askdepth\": 1000, \"askunits\": 17.9447, \"biddepth\": 69, \"bidunits\": 49.3150}, \"quotes\": {\"askquote\": 1000.220, \"bidquote\": 999.950, \"midquote\": 1000.090, \"markquote\": 1000.180, \"indexquote\": 1000.040}, \"spread\": {\"spreadband\": 0.27, \"spreadrate\": 0.0270}, \"metadata\": {\"exchnote\": \"EX368     \", \"mktcombo\": \"ADA-USDT\", \"timetrack\": \"2025-02-19T08:29:46.0595\"}}; max={\"depth\": {\"askdepth\": 9, \"askunits\": 65.9352, \"biddepth\": 481, \"bidunits\": 23.3947}, \"quotes\": {\"askquote\": 37493.690, \"bidquote\": 37459.250, \"midquote\": 37476.470, \"markquote\": 37470.570, \"indexquote\": 37473.240}, \"spread\": {\"spreadband\": 34.44, \"spreadrate\": 0.0919}, \"metadata\": {\"exchnote\": \"EX110     \", \"mktcombo\": \"ADA-USDT\", \"timetrack\": \"2025-02-19T08:29:46.097306\"}}",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketdatanode"
+              ],
+              "foreign_keys": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "table_id": "crypto:marketstats",
+      "table_name": "marketstats",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "marketstatsmark"
+          ],
+          "foreign_keys": [
+            {
+              "from_columns": [
+                "mdlink"
+              ],
+              "to_table": "marketdata",
+              "to_columns": [
+                "marketdatanode"
+              ],
+              "cardinality": "many_to_one",
+              "nullable": true,
+              "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+            }
+          ]
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:marketstats:marketstatsmark",
+          "column_name": "marketstatsmark",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL PK for market stats (e.g., 112233).",
+          "metadata": {
+            "column_identity_references": [
+              {
+                "value": "marketstatsmark identifies or references a row in marketstats. A BIGSERIAL PK for market stats (e.g., 112233).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:fundrate",
+          "column_name": "fundrate",
+          "column_type": "numeric",
+          "description": "A DECIMAL(6,4) funding rate for futures (e.g., '0.0100').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=-0.0010; max=0.0010",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:fundspot",
+          "column_name": "fundspot",
+          "column_type": "timestamp without time zone",
+          "description": "A TIMESTAMP for next or recent funding event (e.g., '2025-05-11 08:00:00').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=2025-02-19 09:29:46; max=2025-02-19 16:29:46",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:openstake",
+          "column_name": "openstake",
+          "column_type": "numeric",
+          "description": "A NUMERIC(15,5) open interest (e.g., '125000.50000').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1029.39000; max=999516.53000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:volday",
+          "column_name": "volday",
+          "column_type": "double precision",
+          "description": "A DOUBLE PRECISION showing 24h volume (e.g., 1204567.8).",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Liquidity Ratio: Liquidity Ratio = \\frac{(bidunits + askunits) \\times midquote}{volday}, \\text{where } bidunits \\text{ and } askunits \\text{ are quantities at best bid and ask, } midquote \\text{ is the midpoint price, and } volday \\text{ is the 24h volume.}",
+                "knowledge_refs": [
+                  "crypto:5"
+                ]
+              }
+            ],
+            "classification_rules": [
+              {
+                "value": "Technical Breakout: Market condition where price exceeds the highspotday or falls below lowspotday with volume (volday) at least 50% above the 30-day average.",
+                "knowledge_refs": [
+                  "crypto:19"
+                ]
+              }
+            ],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=13814.11; max=9984751.45",
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:tradeday",
+          "column_name": "tradeday",
+          "column_type": "integer",
+          "description": "An INTEGER for 24h trade count (e.g., 34567).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1091; max=99927",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:tnoverday",
+          "column_name": "tnoverday",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) 24h turnover or notional (e.g., '356789.230').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=106012.210; max=9993011.870",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:priceshiftday",
+          "column_name": "priceshiftday",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) net 24h price change (e.g., '-350.250').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=-0.200; max=0.200",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:highspotday",
+          "column_name": "highspotday",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) 24h high (e.g., '28100.000').",
+          "metadata": {
+            "formulas": [],
+            "classification_rules": [
+              {
+                "value": "Technical Breakout: Market condition where price exceeds the highspotday or falls below lowspotday with volume (volday) at least 50% above the 30-day average.",
+                "knowledge_refs": [
+                  "crypto:19"
+                ]
+              }
+            ],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=122.420; max=54729.210",
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:lowspotday",
+          "column_name": "lowspotday",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) 24h low (e.g., '27200.000').",
+          "metadata": {
+            "formulas": [],
+            "classification_rules": [
+              {
+                "value": "Technical Breakout: Market condition where price exceeds the highspotday or falls below lowspotday with volume (volday) at least 50% above the 30-day average.",
+                "knowledge_refs": [
+                  "crypto:19"
+                ]
+              }
+            ],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=110.140; max=49786.970",
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:vwapday",
+          "column_name": "vwapday",
+          "column_type": "numeric",
+          "description": "A DECIMAL(12,3) volume-weighted average price (e.g., '27700.125').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=123.000; max=51891.010",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:mktsize",
+          "column_name": "mktsize",
+          "column_type": "numeric",
+          "description": "A NUMERIC(13,3) total market cap or size (e.g., '125000000.000').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=2940098.560; max=998081925.110",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:circtotal",
+          "column_name": "circtotal",
+          "column_type": "numeric",
+          "description": "A NUMERIC(13,3) circulating supply (e.g., '18000000.000').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1001923.270; max=99953407.240",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:totsupply",
+          "column_name": "totsupply",
+          "column_type": "numeric",
+          "description": "A NUMERIC(13,3) total supply (e.g., '21000000.000').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1231365.590; max=193737027.360",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:maxsupply",
+          "column_name": "maxsupply",
+          "column_type": "numeric",
+          "description": "A NUMERIC(13,3) maximum supply if applicable (e.g., '21000000.000').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1617850.470; max=354960447.200",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:mkthold",
+          "column_name": "mkthold",
+          "column_type": "numeric",
+          "description": "A DECIMAL(13,3) market dominance or share (e.g., '45.000').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=0.000; max=0.499",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:traderank",
+          "column_name": "traderank",
+          "column_type": "integer",
+          "description": "An INTEGER rank for volume or liquidity (e.g., 2).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1; max=100",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:liquidscore",
+          "column_name": "liquidscore",
+          "column_type": "numeric",
+          "description": "A DECIMAL(8,2) liquidity measure (e.g., '85.20').",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=0.00; max=1.00",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:volmeter",
+          "column_name": "volmeter",
+          "column_type": "numeric",
+          "description": "A DECIMAL(8,2) volatility or fluctuation rating (e.g., '35.50').",
+          "metadata": {
+            "formulas": [
+              {
+                "value": "Position Value at Risk (PVaR): PVaR = possum \\times volmeter \\times 0.01, \\text{where } possum \\text{ is the notional value of position and } volmeter \\text{ is the volatility or fluctuation rating.}",
+                "knowledge_refs": [
+                  "crypto:2"
+                ]
+              },
+              {
+                "value": "Volatility-Adjusted Spread: Volatility-Adjusted Spread = \\frac{Spread Percentage}{volmeter \\times 0.1}, \\text{where } Spread Percentage \\text{ is the spread as percentage of midpoint price and } volmeter \\text{ is the volatility or fluctuation rating.}",
+                "knowledge_refs": [
+                  "crypto:37"
+                ]
+              }
+            ],
+            "classification_rules": [
+              {
+                "value": "Over-Leveraged Position: A position where the leverage (posmagn) multiplied by the volatility measure (volmeter) exceeds 500, indicating high risk exposure.",
+                "knowledge_refs": [
+                  "crypto:13"
+                ]
+              }
+            ],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "column_identity_references": [],
+            "observed_value_range": "min=0.24; max=99.98",
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:marketstats:mdlink",
+          "column_name": "mdlink",
+          "column_type": "bigint",
+          "description": "A BIGINT FK to MarketData(MarketDataNode), associating stats with a snapshot.",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "marketstatsmark"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdlink"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "marketstats.mdlink = marketdata.marketdatanode"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "table_id": "crypto:analyticsindicators",
+      "table_name": "analyticsindicators",
+      "metadata": {
+        "table_structure": {
+          "primary_key": [
+            "analyticsindicatorsnode"
+          ],
+          "foreign_keys": [
+            {
+              "from_columns": [
+                "mdataref"
+              ],
+              "to_table": "marketdata",
+              "to_columns": [
+                "marketdatanode"
+              ],
+              "cardinality": "many_to_one",
+              "nullable": true,
+              "join_condition": "analyticsindicators.mdataref = marketdata.marketdatanode"
+            },
+            {
+              "from_columns": [
+                "mstatsref"
+              ],
+              "to_table": "marketstats",
+              "to_columns": [
+                "marketstatsmark"
+              ],
+              "cardinality": "many_to_one",
+              "nullable": true,
+              "join_condition": "analyticsindicators.mstatsref = marketstats.marketstatsmark"
+            }
+          ]
+        }
+      },
+      "columns": [
+        {
+          "column_id": "crypto:analyticsindicators:analyticsindicatorsnode",
+          "column_name": "analyticsindicatorsnode",
+          "column_type": "bigint",
+          "description": "A BIGSERIAL PK for analytics records (e.g., 99999).",
+          "metadata": {
+            "column_identity_references": [
+              {
+                "value": "analyticsindicatorsnode identifies or references a row in analyticsindicators. A BIGSERIAL PK for analytics records (e.g., 99999).",
+                "knowledge_refs": []
+              }
+            ],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "analyticsindicatorsnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdataref"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "analyticsindicators.mdataref = marketdata.marketdatanode"
+                },
+                {
+                  "from_columns": [
+                    "mstatsref"
+                  ],
+                  "to_table": "marketstats",
+                  "to_columns": [
+                    "marketstatsmark"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "analyticsindicators.mstatsref = marketstats.marketstatsmark"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:analyticsindicators:mdataref",
+          "column_name": "mdataref",
+          "column_type": "bigint",
+          "description": "A BIGINT FK referencing MarketData(MarketDataNode).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "analyticsindicatorsnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdataref"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "analyticsindicators.mdataref = marketdata.marketdatanode"
+                },
+                {
+                  "from_columns": [
+                    "mstatsref"
+                  ],
+                  "to_table": "marketstats",
+                  "to_columns": [
+                    "marketstatsmark"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "analyticsindicators.mstatsref = marketstats.marketstatsmark"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:analyticsindicators:mstatsref",
+          "column_name": "mstatsref",
+          "column_type": "bigint",
+          "description": "A BIGINT FK referencing MarketStats(MarketStatsMark).",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min=1; max=1000",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "analyticsindicatorsnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdataref"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "analyticsindicators.mdataref = marketdata.marketdatanode"
+                },
+                {
+                  "from_columns": [
+                    "mstatsref"
+                  ],
+                  "to_table": "marketstats",
+                  "to_columns": [
+                    "marketstatsmark"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "analyticsindicators.mstatsref = marketstats.marketstatsmark"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "column_id": "crypto:analyticsindicators:market_sentiment_indicators",
+          "column_name": "market_sentiment_indicators",
+          "column_type": "jsonb",
+          "description": "JSONB column. Aggregates order‑book walls, momentum gauges, technical oscillators, flow imbalances, large‑player activity, and arbitrage signals to streamline advanced analytics and back‑testing.",
+          "metadata": {
+            "column_identity_references": [],
+            "observed_value_range": "min={\"flow\": {\"instflow\": -0.001, \"flowimbal\": 0.554, \"retailflow\": -0.178, \"smartforce\": -0.045, \"tradeimbal\": -0.947, \"largeflowrate\": 0.120}, \"walls\": {\"buywallband\": 0.071, \"sellwallband\": 0.078}, \"momentum\": {\"mktfeel\": \"Bearish\", \"buyforce\": 0.722, \"sellforce\": 0.722, \"techmeter\": \"Hold\"}, \"arbitrage\": {\"fundgap\": 0.0095, \"basisgap\": 0.0092, \"xexchband\": 0.0095, \"arbpotential\": 0.0094}, \"big_players\": {\"makermotion\": \"High\", \"whalemotion\": \"Low\"}, \"oscillators\": {\"bbandspan\": 96.710, \"macdtrail\": 9.800, \"rsi14spot\": 66.170}}; max={\"flow\": {\"instflow\": -0.9, \"flowimbal\": -0.599, \"retailflow\": -0.714, \"smartforce\": 0.762, \"tradeimbal\": 0.099, \"largeflowrate\": 0.896}, \"walls\": {\"buywallband\": 0.039, \"sellwallband\": 0.098}, \"momentum\": {\"mktfeel\": \"Bearish\", \"buyforce\": 0.895, \"sellforce\": 0.436, \"techmeter\": \"Hold\"}, \"arbitrage\": {\"fundgap\": 0.0097, \"basisgap\": 0.0029, \"xexchband\": 0.0098, \"arbpotential\": 0.0029}, \"big_players\": {\"makermotion\": \"Low\", \"whalemotion\": \"High\"}, \"oscillators\": {\"bbandspan\": 64.770, \"macdtrail\": 4.630, \"rsi14spot\": 2.330}}",
+            "formulas": [],
+            "classification_rules": [],
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "table_structure": {
+              "primary_key": [
+                "analyticsindicatorsnode"
+              ],
+              "foreign_keys": [
+                {
+                  "from_columns": [
+                    "mdataref"
+                  ],
+                  "to_table": "marketdata",
+                  "to_columns": [
+                    "marketdatanode"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "analyticsindicators.mdataref = marketdata.marketdatanode"
+                },
+                {
+                  "from_columns": [
+                    "mstatsref"
+                  ],
+                  "to_table": "marketstats",
+                  "to_columns": [
+                    "marketstatsmark"
+                  ],
+                  "cardinality": "many_to_one",
+                  "nullable": true,
+                  "join_condition": "analyticsindicators.mstatsref = marketstats.marketstatsmark"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -111,8 +111,8 @@ def _read_json(path: Path, *, label: str) -> dict[str, Any]:
     return _as_dict(raw, label=label)
 
 
-def metadata_manifest_path(data_dir: Path | None = None) -> Path:
-    return (data_dir or settings.data_dir) / MANIFEST_FILENAME
+def metadata_manifest_path(metadata_dir: Path | None = None) -> Path:
+    return (metadata_dir or settings.metadata_dir) / MANIFEST_FILENAME
 
 
 def metadata_cache_dir(project_root: Path | None = None) -> Path:
@@ -475,8 +475,8 @@ class MetadataSearchRepository:
             if np is None:
                 raise MetadataSearchError("METADATA_UNAVAILABLE", "NumPy is required for metadata retrieval")
 
-            data_dir = Path(self._config.data_dir)
-            manifest = _read_json(metadata_manifest_path(data_dir), label="metadata manifest")
+            metadata_dir = Path(self._config.metadata_dir)
+            manifest = _read_json(metadata_manifest_path(metadata_dir), label="metadata manifest")
             required = {
                 "schema_version",
                 "generator_model",
@@ -502,7 +502,7 @@ class MetadataSearchRepository:
             for database in databases:
                 if database.casefold() != database or not database:
                     raise MetadataSearchError("METADATA_INVALID", f"invalid metadata database {database!r}")
-                path = data_dir / database / f"{database}{METADATA_FILENAME_SUFFIX}"
+                path = metadata_dir / f"{database}{METADATA_FILENAME_SUFFIX}"
                 raw = _read_json(path, label=f"{database} metadata")
                 loaded_columns = _validate_metadata_file(raw, database)
                 overlap = set(columns).intersection(loaded_columns)

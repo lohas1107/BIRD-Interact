@@ -647,13 +647,14 @@ class MetadataCorpusGenerator:
         return {"manifest": manifest, "databases": outputs}
 
     @staticmethod
-    def write(output: dict[str, Any], source_root: Path) -> None:
+    def write(output: dict[str, Any], metadata_dir: Path) -> None:
         manifest = output["manifest"]
         databases = output["databases"]
+        metadata_dir.mkdir(parents=True, exist_ok=True)
         for database, metadata in databases.items():
-            target = source_root / database / f"{database}_metadata.json"
+            target = metadata_dir / f"{database}_metadata.json"
             target.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        (source_root / "metadata_manifest.json").write_text(
+        (metadata_dir / "metadata_manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
@@ -662,11 +663,13 @@ class MetadataCorpusGenerator:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=settings.data_dir)
+    parser.add_argument("--metadata-dir", type=Path, default=settings.metadata_dir)
     args = parser.parse_args()
     source = args.source.resolve()
+    metadata_dir = args.metadata_dir.resolve()
     try:
         result = MetadataCorpusGenerator(source).generate()
-        MetadataCorpusGenerator.write(result, source)
+        MetadataCorpusGenerator.write(result, metadata_dir)
     except MetadataGenerationError as exc:
         print(f"metadata generation failed: {exc}", file=sys.stderr)
         return 1

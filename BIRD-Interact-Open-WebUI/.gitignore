@@ -23,12 +23,11 @@ results/
 *.log
 batch_evaluation.log
 
-# Fixed metadata JSON/manifest are source artifacts; only their local vectors
-# are ignored because they are reproducible from the pinned embedding model.
+# The fixed metadata JSON/manifest live in the workspace-level ../metadata
+# directory; only their local vectors are ignored here.
 .cache/metadata-5-2-kg/
 
-# Data (download from HuggingFace, not committed). The dataset repository
-# carries the fixed metadata JSON/manifest artifacts independently.
+# Data (download from HuggingFace, not committed).
 bird-interact-lite/
 bird-interact-full/
 

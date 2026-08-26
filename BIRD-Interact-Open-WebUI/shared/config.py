@@ -88,9 +88,14 @@ class Settings(BaseSettings):
         return str(self.data_dir)
 
     @property
+    def metadata_dir(self) -> Path:
+        """Workspace-level directory containing the fixed metadata corpus."""
+        return PROJECT_ROOT.parent / "metadata"
+
+    @property
     def metadata_manifest_path(self) -> Path:
         """Fixed metadata corpus manifest used by the metadata-5-2 profile."""
-        return self.data_dir / "metadata_manifest.json"
+        return self.metadata_dir / "metadata_manifest.json"
 
     @property
     def metadata_cache_dir(self) -> Path:

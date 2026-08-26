@@ -1,0 +1,29 @@
+{
+  "schema_version": "metadata-5-2-v1",
+  "generator_model": "gpt-5.6-sol",
+  "embedding_model": "text-embedding-3-small",
+  "dimensions": 1536,
+  "metadata_source_hash": "b433aeae6dfa80493e0906c7a02e82385465d933d610a03b165d1ae09b67fabd",
+  "databases": [
+    "alien",
+    "archeology",
+    "credit",
+    "cross_db",
+    "crypto",
+    "cybermarket",
+    "disaster",
+    "fake",
+    "gaming",
+    "insider",
+    "mental",
+    "museum",
+    "news",
+    "polar",
+    "robot",
+    "solar",
+    "vaccine",
+    "virtual"
+  ],
+  "column_count": 2286,
+  "manifest_hash": "9773807750adc09d760e29ead8cd1e505df80bf09fb7e7d2945da864bea20e79"
+}

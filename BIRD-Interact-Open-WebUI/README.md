@@ -103,9 +103,10 @@ DATASET=lite bash scripts/provision_kg.sh
 `DATASET=full` selects `bird-interact-full`. Provisioning is rerunnable and
 does not reset Neo4j unless `RESET_KG=1` is explicitly supplied.
 
-The opt-in `metadata-5-2-kg` profile uses the fixed local metadata corpus.
-Build it once after PostgreSQL is available, then build its local embedding
-cache while the embedding service is running:
+The opt-in `metadata-5-2-kg` profile uses the fixed local metadata corpus in
+the workspace-level `../metadata/` directory, separate from the dataset
+directories. Build it once after PostgreSQL is available, then build its local
+embedding cache while the embedding service is running:
 
 ```bash
 python scripts/generate_metadata_5_2.py
@@ -114,8 +115,9 @@ python scripts/build_metadata_embeddings_5_2.py
 
 Both commands fail closed: corpus generation requires read-only PostgreSQL
 range queries for every lite column, and evaluation never rebuilds a missing
-JSON or vector cache. The JSON files and manifest are source artifacts; the
-NumPy vectors under `.cache/metadata-5-2-kg/` are local cache files.
+JSON or vector cache. The JSON files and manifest under `../metadata/` are
+source artifacts; the NumPy vectors under `.cache/metadata-5-2-kg/` are local
+cache files.
 
 The opt-in `metadata-5-2` profile reuses those same metadata assets but exposes
 metadata candidates only. It is available for both interaction modes and does

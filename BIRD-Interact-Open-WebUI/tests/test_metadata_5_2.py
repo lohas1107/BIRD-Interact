@@ -15,8 +15,10 @@ from db_environment.metadata_5_2 import (
     _validate_metadata_file,
     canonical_manifest_hash,
 )
+from scripts.build_metadata_embeddings_5_2 import build_cache
 from scripts.generate_metadata_5_2 import MetadataCorpusGenerator
 from shared.agent_profiles import resolve_agent_profile
+from shared.config import settings
 from shared.models import MetadataSearchRequest
 from system_agent import tools
 
@@ -73,10 +75,13 @@ class MetadataSearchTests(unittest.TestCase):
         self.data = root / "data"
         self.data.mkdir()
         (self.data / "alien").mkdir()
+        self.metadata = root / "metadata"
+        self.metadata.mkdir()
         self.cache = root / ".cache" / "metadata-5-2-kg"
         self.cache.mkdir(parents=True)
         self.config = SimpleNamespace(
             data_dir=self.data,
+            metadata_dir=self.metadata,
             project_root=root,
             embedding_timeout=1.0,
             embedding_service_url="http://embedding",
@@ -91,7 +96,7 @@ class MetadataSearchTests(unittest.TestCase):
             "databases": ["alien"],
             "column_count": 2,
         }
-        (self.data / "metadata_manifest.json").write_text(json.dumps(self.manifest), encoding="utf-8")
+        (self.metadata / "metadata_manifest.json").write_text(json.dumps(self.manifest), encoding="utf-8")
         metadata = {
             "schema_version": "metadata-5-2-v1",
             "database": "alien",
@@ -110,7 +115,7 @@ class MetadataSearchTests(unittest.TestCase):
                 ],
             }],
         }
-        (self.data / "alien" / "alien_metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+        (self.metadata / "alien_metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
 
         fragments = []
         for column_id, column_name, text, refs in [
@@ -325,7 +330,8 @@ class MetadataSearchTests(unittest.TestCase):
 class MetadataCorpusSmokeTests(unittest.TestCase):
     def test_generated_lite_metadata_artifacts_load(self):
         source = Path(__file__).resolve().parents[1] / "bird-interact-lite"
-        manifest_path = source / "metadata_manifest.json"
+        metadata_dir = settings.metadata_dir
+        manifest_path = metadata_dir / "metadata_manifest.json"
         self.assertTrue(manifest_path.exists(), "run the one-time metadata generator first")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(manifest["schema_version"], "metadata-5-2-v1")
@@ -335,11 +341,72 @@ class MetadataCorpusSmokeTests(unittest.TestCase):
         self.assertEqual(len(manifest["databases"]), 18)
         columns = 0
         for database in manifest["databases"]:
-            path = source / database / f"{database}_metadata.json"
+            path = metadata_dir / f"{database}_metadata.json"
             self.assertTrue(path.exists(), path)
             columns += len(_validate_metadata_file(json.loads(path.read_text(encoding="utf-8")), database))
         self.assertEqual(columns, 2286)
         self.assertEqual(manifest["column_count"], columns)
+        self.assertFalse((source / "metadata_manifest.json").exists())
+        self.assertEqual(list(source.rglob("*_metadata.json")), [])
+
+    def test_generator_writes_flat_metadata_directory(self):
+        source = Path(__file__).resolve().parents[1] / "bird-interact-lite"
+
+        class EmptyRangeReader:
+            def read(self, database, tables):
+                return {
+                    table["table_name"]: {column["column_name"]: "" for column in table["columns"]}
+                    for table in tables
+                }
+
+        with tempfile.TemporaryDirectory() as temp:
+            metadata_dir = Path(temp) / "metadata"
+            result = MetadataCorpusGenerator(source, EmptyRangeReader()).generate()
+            MetadataCorpusGenerator.write(result, metadata_dir)
+            self.assertTrue((metadata_dir / "metadata_manifest.json").exists())
+            self.assertEqual(
+                sorted(path.name for path in metadata_dir.glob("*_metadata.json")),
+                sorted(f"{database}_metadata.json" for database in result["databases"]),
+            )
+            self.assertEqual(list(metadata_dir.glob("*/")), [])
+
+    def test_embedding_builder_reads_flat_metadata_directory(self):
+        metadata = {
+            "schema_version": "metadata-5-2-v1",
+            "database": "alien",
+            "formulas": [],
+            "classification_rules": [],
+            "table_structure": {},
+            "disambiguation_rules": [],
+            "known_discrepancies": [],
+            "tables": [{
+                "table_id": "alien:signals",
+                "table_name": "signals",
+                "metadata": {"table_structure": {}},
+                "columns": [_column("signals", "score", "visible score")],
+            }],
+        }
+        manifest = {
+            "schema_version": "metadata-5-2-v1",
+            "generator_model": "gpt-5.6-sol",
+            "embedding_model": "text-embedding-3-small",
+            "dimensions": 1536,
+            "metadata_source_hash": "source-hash",
+            "databases": ["alien"],
+            "column_count": 1,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            metadata_dir = root / "metadata"
+            metadata_dir.mkdir()
+            cache_dir = root / "cache"
+            (metadata_dir / "metadata_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            (metadata_dir / "alien_metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+            _EmbeddingClient.vectors = [[1.0] + [0.0] * 1535 for _ in range(4)]
+            with patch("scripts.build_metadata_embeddings_5_2.httpx.Client", _EmbeddingClient):
+                result = build_cache(metadata_dir, cache_dir, "http://embedding", 1.0)
+            self.assertEqual(result["fragments"], 4)
+            self.assertTrue((cache_dir / "metadata_embedding_index.json").exists())
 
     def test_all_lite_sources_parse_to_2286_columns_without_forbidden_task_fields(self):
         source = Path(__file__).resolve().parents[1] / "bird-interact-lite"
